@@ -35,6 +35,7 @@ placeholder binary name throughout.
 | M14 | Web UI write actions + auth | [m14-web-ui-write-auth.md](m14-web-ui-write-auth.md) |
 | M15 | Multi-server networking polish | [m15-networking-polish.md](m15-networking-polish.md) |
 | M16 | Per-server TUI dashboard | [m16-tui-dashboard.md](m16-tui-dashboard.md) |
+| M17 | World management (independent of server config) | [m17-world-management.md](m17-world-management.md) |
 
 ## Suggested pacing
 
@@ -53,3 +54,9 @@ on M8–M15 at all, so it can slot in right after M7 if a live per-server
 dashboard is more valuable to you sooner than mods/modpacks/backups, or be
 left until last as a polish item. It's numbered last here only because it
 was added to the plan after M0–M15 already existed.
+
+M17 (world management) only needs M1 — it's independent of M4–M16 and
+could even come right after M3 if separating "manage the save data" from
+"manage the server's config" matters to you before mods/monitoring/backups
+do. It's also numbered last only because of when it was added, not because
+of a real ordering dependency.

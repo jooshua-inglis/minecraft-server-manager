@@ -278,6 +278,17 @@ monitoring dashboards, a CLI UX).
   container running at all times). Leaning toward reusing the sidecar for
   scheduled backups, with our CLI also able to trigger one-off backups
   through the same mechanism.
+- **Worlds managed independently of server config**: the world save itself
+  (the `LEVEL`-named directory inside `data/`) gets its own CLI operations
+  — backup/restore/reset/export/import — scoped to just that subdirectory,
+  separate from whole-server backups above and never touching a server's
+  type/version/mods/whitelist config. Worlds stay physically embedded 1:1
+  inside each server's `data/` directory (no separate shared "world
+  library" store — that was considered and deliberately deferred as more
+  than this project needs right now), but exporting a world to an archive
+  and importing it into a *different* server's `data/` directory is how
+  portability works instead: independence in what you can do with a world,
+  not in where it's stored.
 - **Mods/plugins/modpacks**: mostly a matter of the CLI translating
   `mcm install-mod <server> <modrinth-or-curseforge-ref>` /
   `mcm install-modpack <server> --source modrinth <slug>` into the right
