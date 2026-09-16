@@ -26,9 +26,17 @@ Each server:
 
 This puts the project in the same space as Pterodactyl, Crafty Controller,
 PufferPanel, MCSManager, AMP, and LinuxGSM, but deliberately narrower
-(Minecraft-only, CLI-only, single-host, Docker-only) and opinionated (delegate
+(Minecraft-only, single-host, Docker-only) and opinionated (delegate
 all the hard "download the right server jar / mod loader / modpack" work to
 the itzg image rather than reimplementing it).
+
+The CLI is the primary interface, but a **web UI is a first-class secondary
+interface**, not a bolt-on: running `<minecraft-server-manager> web` starts a
+local web server exposing the same management surface (create/start/stop
+servers, users/whitelist, console/RCON, mods/plugins/modpacks, monitoring)
+through a browser instead of a terminal. Both interfaces must be driven by
+the same underlying logic and see the same fleet state — the web mode is not
+a separate product, it's another front end bolted onto one core.
 
 ## 2. Survey of existing Minecraft server managers
 
@@ -69,9 +77,19 @@ signal for our own MVP → v1 scope:
 - Permission/user model (only matters once this is more than single-operator)
 
 Things Pterodactyl/AMP have that we can consciously **not** build (out of
-scope for a single-operator CLI tool): multi-node clusters, web-based file
-manager, OAuth/subuser accounts, billing/quota systems, generic non-Minecraft
-game support.
+scope for a single-operator tool): multi-node clusters, OAuth/subuser
+accounts, billing/quota systems, generic non-Minecraft game support. A
+basic web-based file manager and console, however, are in scope, since
+`web` is meant to be a genuine alternative to the CLI, not just a status
+dashboard.
+
+One architectural pattern worth borrowing directly: Pterodactyl and
+MCSManager both split into a "panel" (UI) and a "daemon"/"wings" (the thing
+that actually talks to Docker), communicating over a local API. Our `web`
+subcommand can follow the same shape *without* needing a second process —
+the CLI binary itself starts an embedded HTTP server that calls straight
+into the same core management library the CLI commands use, rather than
+shelling out to itself or requiring a separately-run daemon.
 
 ## 3. Common challenges in Minecraft server operations
 
@@ -266,6 +284,22 @@ monitoring dashboards, a CLI UX).
 - **Monitoring**: combine Docker-level stats (CPU/RAM/net/disk from the
   Docker Engine API) with Minecraft-level stats (`mc-monitor`/RCON `list`,
   `tps` if a plugin exposes it) into one `mcm status`/`mcm top` view.
+- **CLI/web sharing one core**: structure the codebase as a core library
+  (fleet state, Docker orchestration, RCON, mod/modpack install logic) with
+  two thin front ends on top — the CLI command parser, and an HTTP
+  server + web UI started by `mcm web`. Neither front end should contain
+  business logic; both just call the same functions/service layer and
+  render the result differently (terminal output vs. JSON API + HTML/JS).
+  This is what keeps "same thing, two interfaces" true instead of the web
+  UI drifting into a separate reimplementation.
+- **`mcm web` specifics to work out later**: what it binds to by default
+  (localhost-only vs. LAN-exposed — should default to localhost given no
+  auth model yet), whether it needs its own auth/session layer before it's
+  safe to expose beyond localhost, whether it's read/write from day one or
+  starts read-only (status/monitoring) before console/lifecycle actions are
+  added, and whether the web server can coexist with the CLI acting on the
+  same fleet concurrently (both should just read/write the same on-disk
+  state and Docker resources — no separate "web-only" state).
 
 ## 6. Open questions / decisions needed before implementation
 
@@ -284,6 +318,19 @@ monitoring dashboards, a CLI UX).
 6. **CurseForge API key handling** — where/how a user-supplied `CF_API_KEY`
    is stored (plain config vs. OS keychain) given it's a personal
    credential.
+7. **Web UI auth** — the CLI has an implicit trust model (whoever has shell
+   access on the host). `mcm web` breaks that as soon as it's reachable from
+   anything but localhost — needs at least a single-operator password/token
+   before it's safe to bind beyond `127.0.0.1`. Does v0 just hard-bind to
+   localhost and defer real auth, or is basic auth/token required from day
+   one?
+8. **Web stack** — server-rendered pages vs. a JSON API + separate frontend
+   (SPA); whether the web server ships in the same binary/process as the
+   CLI (favored, see §5) or as an optional separate component.
+9. **Realtime updates in the web UI** — console/log tailing and live
+   resource graphs imply websockets or SSE from the embedded web server;
+   worth deciding early since it affects the core library's API shape
+   (needs to support streaming, not just request/response).
 
 ## 7. Suggested next steps
 
@@ -292,13 +339,20 @@ monitoring dashboards, a CLI UX).
 2. Define the v0 CLI command surface (`mcm create`, `mcm start/stop`,
    `mcm list`, `mcm logs`, `mcm exec`, `mcm backup`, `mcm mods
    add/remove/list`, `mcm modpack install`, `mcm whitelist/op/ban`, `mcm
-   status`) as a spec doc.
+   status`, `mcm web`) as a spec doc, phrased as calls into a core
+   library/service layer rather than logic embedded in command handlers —
+   so `mcm web` can call the exact same layer later without a rewrite.
 3. Prototype: create one server end-to-end (create → EULA accept → start →
    RCON command → stop → destroy) against the itzg image via Docker Compose,
    to validate the volume/env-var model before building the CLI around it.
 4. Layer in mods/modpacks (Modrinth first — no API key friction — then
    CurseForge).
 5. Layer in monitoring and backups once basic lifecycle management is solid.
+6. Once the core library and CLI are stable for basic lifecycle + status,
+   add `mcm web`: start with a localhost-only, read-only dashboard (fleet
+   list, per-server status/resource graphs, log tailing) before adding
+   write actions (start/stop, console commands, mod installs) gated behind
+   whatever auth answer comes out of open question #7.
 
 ## Sources
 
