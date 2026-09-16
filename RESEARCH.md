@@ -246,20 +246,13 @@ monitoring dashboards, a CLI UX).
 ## 5. Implications for our design
 
 - **One container per server, host-mounted data dir**: aligns exactly with
-  itzg's `/data` convention. Proposed host layout:
-  `~/mc-servers/<name>/data` (bind-mounted to `/data`),
-  `~/mc-servers/<name>/compose.yml` or a central manager-owned
-  `docker-compose.yml`/state file, per-server metadata (chosen type, version,
-  ports, created-at) tracked by our CLI in something simple and diffable
-  (SQLite or a per-server `manager.json`/`state.yaml` alongside the data
-  dir — needs a decision, see open questions).
-- **Docker orchestration approach**: either shell out to `docker
-  compose`/`docker run` per server, or use the Docker Engine API directly
-  (e.g. via a Go or Python Docker SDK) for tighter control (attaching to
-  logs/stats streams, health status). Given "CLI that lets you spin up/down,
-  monitor resources" this leans toward using the Docker SDK directly rather
-  than only shelling out, so we can stream `docker stats`-equivalent data
-  and container health without parsing CLI output.
+  itzg's `/data` convention — see the "Server data root" and "State
+  storage" bullets below for the resolved host layout and metadata
+  approach.
+- **Docker orchestration approach**: use the Docker Engine API directly via
+  the official Go SDK (`docker/docker/client`) rather than shelling out to
+  `docker`/`docker compose`, so we can stream `docker stats`-equivalent data,
+  logs, and health/container events without parsing CLI output.
 - **Command execution**: use RCON (via a small embedded RCON client, same
   protocol as `rcon-cli`) rather than `docker exec` into the console, since
   RCON is what the backup/monitoring ecosystem already assumes and avoids
@@ -284,14 +277,14 @@ monitoring dashboards, a CLI UX).
 - **Monitoring**: combine Docker-level stats (CPU/RAM/net/disk from the
   Docker Engine API) with Minecraft-level stats (`mc-monitor`/RCON `list`,
   `tps` if a plugin exposes it) into one `mcm status`/`mcm top` view.
-- **CLI/web sharing one core**: structure the codebase as a core library
+- **CLI/web sharing one core**: structure the codebase as a Go core package
   (fleet state, Docker orchestration, RCON, mod/modpack install logic) with
-  two thin front ends on top — the CLI command parser, and an HTTP
-  server + web UI started by `mcm web`. Neither front end should contain
-  business logic; both just call the same functions/service layer and
-  render the result differently (terminal output vs. JSON API + HTML/JS).
-  This is what keeps "same thing, two interfaces" true instead of the web
-  UI drifting into a separate reimplementation.
+  two thin front ends on top — the CLI command parser (e.g. `cobra`), and
+  an embedded HTTP server started by `mcm web` that serves a JSON/REST (or
+  RPC) API. Neither front end should contain business logic; both just
+  call the same Go functions/service layer. This is what keeps "same
+  thing, two interfaces" true instead of the web UI drifting into a
+  separate reimplementation.
 - **`mcm web` specifics to work out later**: what it binds to by default
   (localhost-only vs. LAN-exposed — should default to localhost given no
   auth model yet), whether it needs its own auth/session layer before it's
@@ -300,59 +293,97 @@ monitoring dashboards, a CLI UX).
   added, and whether the web server can coexist with the CLI acting on the
   same fleet concurrently (both should just read/write the same on-disk
   state and Docker resources — no separate "web-only" state).
+- **State storage, resolved**: Docker itself is the source of truth for
+  runtime state (running/stopped/health/stats), queried live via the Go
+  Docker SDK rather than mirrored into a file that can drift out of sync
+  (e.g. after someone runs `docker stop` outside the CLI, or a host
+  reboot). Manager-owned metadata that Docker can't hold is split by scope:
+  - Per-server config (requested type/version, port, backup schedule) lives
+    in a small `manager.json` sitting next to that server's `data/`
+    directory — inside the server's own folder, not inside `data/` itself
+    (so it's never swept into a world backup) — making each server folder
+    self-contained and portable as a single unit. The same values are also
+    set as Docker labels on the container at creation time where useful, so
+    `docker inspect`/`docker ps --filter` can cross-check against the file.
+  - Global manager config (CurseForge API key, default servers-root path,
+    web auth token) lives separately in the standard per-OS config location
+    (`~/.config/mcm/config.toml` on Linux via XDG, respectively `os.UserConfigDir()` in Go)
+    since it's manager identity, not any one server's state.
+- **Server data root, resolved**: a configurable root directory the
+  operator can browse directly (default e.g. `~/mc-servers/`), with each
+  server at `<root>/<name>/{data/, manager.json}`. `data/` is what's
+  bind-mounted into the container's `/data`. Deliberately not tucked away
+  under an XDG *data* directory — discoverability of the actual world/mod
+  files was an explicit project goal.
 
-## 6. Open questions / decisions needed before implementation
+## 6. Decisions made
 
-1. **CLI implementation language/framework** — no stack has been chosen yet
-   (Go pairs naturally with Docker SDK + single static binary distribution;
-   Python/Node are faster to prototype but need packaging thought).
-2. **State storage** — flat files per server vs. a local SQLite DB for the
-   manager's own metadata (name → container/port/type/version mapping).
-3. **Multi-user/permissions** — is this strictly single-operator, or does it
+- **Language/stack**: CLI and the embedded web *server* (API/backend) are
+  both **Go** — one core module/binary, sharing the Docker SDK client, RCON
+  client, and fleet/service logic between the `mcm` CLI commands and the
+  `mcm web` HTTP server (see §5's "CLI/web sharing one core").
+- **Web UI**: the frontend is **SvelteKit**, talking to the Go backend's API
+  (REST/JSON, plus websockets/SSE for log/console streaming and live
+  resource graphs — see open question below). Built and either embedded
+  into the Go binary (via `embed.FS`) for single-binary distribution, or
+  served separately in dev — final packaging approach still open.
+- **State storage**: resolved as described in §5 — Docker is the runtime
+  source of truth (queried live, no mirrored running/stopped flag to go
+  stale), per-server metadata lives in `manager.json` next to each server's
+  `data/` directory, and global manager config lives in the OS-standard
+  config dir. No SQLite/central DB for v0.
+
+## 7. Open questions / decisions still needed
+
+1. **Multi-user/permissions** — is this strictly single-operator, or does it
    need any notion of "who can run what," even locally?
-4. **Networking model** — plain per-server host port mapping vs. adopting
+2. **Networking model** — plain per-server host port mapping vs. adopting
    `mc-router` for hostname-based routing when multiple public servers share
    a host.
-5. **Backup strategy** — sidecar container (`itzg/mc-backup`) vs. built into
+3. **Backup strategy** — sidecar container (`itzg/mc-backup`) vs. built into
    the CLI itself.
-6. **CurseForge API key handling** — where/how a user-supplied `CF_API_KEY`
+4. **CurseForge API key handling** — where/how a user-supplied `CF_API_KEY`
    is stored (plain config vs. OS keychain) given it's a personal
    credential.
-7. **Web UI auth** — the CLI has an implicit trust model (whoever has shell
+5. **Web UI auth** — the CLI has an implicit trust model (whoever has shell
    access on the host). `mcm web` breaks that as soon as it's reachable from
    anything but localhost — needs at least a single-operator password/token
    before it's safe to bind beyond `127.0.0.1`. Does v0 just hard-bind to
    localhost and defer real auth, or is basic auth/token required from day
    one?
-8. **Web stack** — server-rendered pages vs. a JSON API + separate frontend
-   (SPA); whether the web server ships in the same binary/process as the
-   CLI (favored, see §5) or as an optional separate component.
-9. **Realtime updates in the web UI** — console/log tailing and live
-   resource graphs imply websockets or SSE from the embedded web server;
-   worth deciding early since it affects the core library's API shape
-   (needs to support streaming, not just request/response).
+6. **SvelteKit packaging** — embed the built static assets into the Go
+   binary (`embed.FS`, one artifact to ship) vs. deploy the SvelteKit
+   frontend as its own process/container hitting the Go API separately
+   (more moving parts, but a normal Node dev loop for UI work).
+7. **Realtime updates in the web UI** — console/log tailing and live
+   resource graphs imply websockets or SSE from the Go backend; worth
+   deciding early since it affects the core library's API shape (needs to
+   support streaming, not just request/response), and SvelteKit's data
+   loading model (stores fed by a websocket vs. polling a REST endpoint).
 
-## 7. Suggested next steps
+## 8. Suggested next steps
 
-1. Decide the open questions in §6 (at least #1 and #2 — everything else can
-   evolve).
+1. Decide the remaining open questions in §7 (at least #1 and #5 —
+   everything else can evolve).
 2. Define the v0 CLI command surface (`mcm create`, `mcm start/stop`,
    `mcm list`, `mcm logs`, `mcm exec`, `mcm backup`, `mcm mods
    add/remove/list`, `mcm modpack install`, `mcm whitelist/op/ban`, `mcm
-   status`, `mcm web`) as a spec doc, phrased as calls into a core
-   library/service layer rather than logic embedded in command handlers —
+   status`, `mcm web`) as a spec doc, phrased as calls into a core Go
+   package/service layer rather than logic embedded in command handlers —
    so `mcm web` can call the exact same layer later without a rewrite.
 3. Prototype: create one server end-to-end (create → EULA accept → start →
-   RCON command → stop → destroy) against the itzg image via Docker Compose,
-   to validate the volume/env-var model before building the CLI around it.
+   RCON command → stop → destroy) against the itzg image via the Go Docker
+   SDK, to validate the volume/env-var model and `manager.json` layout
+   before building the rest of the CLI around it.
 4. Layer in mods/modpacks (Modrinth first — no API key friction — then
    CurseForge).
 5. Layer in monitoring and backups once basic lifecycle management is solid.
-6. Once the core library and CLI are stable for basic lifecycle + status,
-   add `mcm web`: start with a localhost-only, read-only dashboard (fleet
-   list, per-server status/resource graphs, log tailing) before adding
-   write actions (start/stop, console commands, mod installs) gated behind
-   whatever auth answer comes out of open question #7.
+6. Once the core Go package and CLI are stable for basic lifecycle + status,
+   scaffold the SvelteKit frontend against a first-cut Go API: start with a
+   localhost-only, read-only dashboard (fleet list, per-server
+   status/resource graphs, log tailing) before adding write actions
+   (start/stop, console commands, mod installs) gated behind whatever auth
+   answer comes out of open question §7.5.
 
 ## Sources
 
