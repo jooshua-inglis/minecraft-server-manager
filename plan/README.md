@@ -34,6 +34,7 @@ placeholder binary name throughout.
 | M13 | Web UI (read-only dashboard) | [m13-web-ui-readonly.md](m13-web-ui-readonly.md) |
 | M14 | Web UI write actions + auth | [m14-web-ui-write-auth.md](m14-web-ui-write-auth.md) |
 | M15 | Multi-server networking polish | [m15-networking-polish.md](m15-networking-polish.md) |
+| M16 | Per-server TUI dashboard | [m16-tui-dashboard.md](m16-tui-dashboard.md) |
 
 ## Suggested pacing
 
@@ -46,3 +47,9 @@ after the CLI is functionally complete, per the "CLI first, web is a
 second front end on the same core" design — building them earlier risks
 the web UI accidentally becoming the place business logic lives, which is
 exactly what `RESEARCH.md` §5 warns against.
+
+M16 (the TUI dashboard) only needs M4, M6, and M7 done — it doesn't depend
+on M8–M15 at all, so it can slot in right after M7 if a live per-server
+dashboard is more valuable to you sooner than mods/modpacks/backups, or be
+left until last as a polish item. It's numbered last here only because it
+was added to the plan after M0–M15 already existed.

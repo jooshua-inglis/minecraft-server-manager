@@ -291,13 +291,16 @@ monitoring dashboards, a CLI UX).
 - **Monitoring**: combine Docker-level stats (CPU/RAM/net/disk from the
   Docker Engine API) with Minecraft-level stats (`mc-monitor`/RCON `list`,
   `tps` if a plugin exposes it) into one `mcm status`/`mcm top` view.
-- **CLI/web sharing one core**: structure the codebase as a Go core package
-  (fleet state, Docker orchestration, RCON, mod/modpack install logic) with
-  two thin front ends on top — the CLI command parser (e.g. `cobra`), and
+- **CLI/web/TUI sharing one core**: structure the codebase as a Go core
+  package (fleet state, Docker orchestration, RCON, mod/modpack install
+  logic) with thin front ends on top — the CLI command parser (`cobra`),
   an embedded HTTP server started by `mcm web` that serves a JSON/REST (or
-  RPC) API. Neither front end should contain business logic; both just
+  RPC) API, and a per-server terminal dashboard started by `mcm attach
+  <name>` (`charmbracelet/bubbletea` + `bubbles`/`lipgloss`) combining live
+  logs, resource stats, and an RCON command line into one screen. None of
+  the three front ends should contain business logic; all of them just
   call the same Go functions/service layer. This is what keeps "same
-  thing, two interfaces" true instead of the web UI drifting into a
+  thing, multiple interfaces" true instead of any of them drifting into a
   separate reimplementation.
 - **`mcm web` specifics to work out later**: what it binds to by default
   (localhost-only vs. LAN-exposed — should default to localhost given no
