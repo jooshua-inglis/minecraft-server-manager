@@ -249,6 +249,20 @@ monitoring dashboards, a CLI UX).
   itzg's `/data` convention — see the "Server data root" and "State
   storage" bullets below for the resolved host layout and metadata
   approach.
+- **Editing an existing server (name, image/type)**: a server's name and its
+  underlying image/software must both be editable after creation, not just
+  fixed at `mcm create` time — e.g. `mcm rename <old> <new>` and `mcm edit
+  <name> --type PAPER --version 1.21.1` (or an equivalent `--image` flag for
+  pinning a specific itzg image tag/digest per §"risk" discussion). Renaming
+  updates the server's directory name, `manager.json`, and the container's
+  name/labels together as one operation (container recreated under the new
+  name — Docker doesn't support renaming a container's identity-relevant
+  labels in place). Changing type/version/image recreates the container
+  with new env vars against the *same* `data/` directory, which is exactly
+  the upgrade/downgrade path the itzg image already supports (§4) — the CLI
+  just needs to surface it as an explicit edit rather than only as part of
+  `create`, and should warn (per the plugin/mod version-lag challenge in
+  §3) before applying a change that might break installed mods/plugins.
 - **Docker orchestration approach**: use the Docker Engine API directly via
   the official Go SDK (`docker/docker/client`) rather than shelling out to
   `docker`/`docker compose`, so we can stream `docker stats`-equivalent data,
@@ -365,12 +379,13 @@ monitoring dashboards, a CLI UX).
 
 1. Decide the remaining open questions in §7 (at least #1 and #5 —
    everything else can evolve).
-2. Define the v0 CLI command surface (`mcm create`, `mcm start/stop`,
-   `mcm list`, `mcm logs`, `mcm exec`, `mcm backup`, `mcm mods
-   add/remove/list`, `mcm modpack install`, `mcm whitelist/op/ban`, `mcm
-   status`, `mcm web`) as a spec doc, phrased as calls into a core Go
-   package/service layer rather than logic embedded in command handlers —
-   so `mcm web` can call the exact same layer later without a rewrite.
+2. Define the v0 CLI command surface (`mcm create`, `mcm rename`, `mcm edit`
+   [name/type/version/image], `mcm start/stop`, `mcm list`, `mcm logs`,
+   `mcm exec`, `mcm backup`, `mcm mods add/remove/list`, `mcm modpack
+   install`, `mcm whitelist/op/ban`, `mcm status`, `mcm web`) as a spec doc,
+   phrased as calls into a core Go package/service layer rather than logic
+   embedded in command handlers — so `mcm web` can call the exact same
+   layer later without a rewrite.
 3. Prototype: create one server end-to-end (create → EULA accept → start →
    RCON command → stop → destroy) against the itzg image via the Go Docker
    SDK, to validate the volume/env-var model and `manager.json` layout
