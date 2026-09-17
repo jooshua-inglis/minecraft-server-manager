@@ -125,6 +125,21 @@ func (c *Client) Stop(ctx context.Context, name string, timeout time.Duration) e
 	return nil
 }
 
+// Logs returns the raw (still multiplexed stdout/stderr) log stream for
+// a container. Callers demultiplex it with stdcopy.StdCopy.
+func (c *Client) Logs(ctx context.Context, name string, follow bool, tail string) (io.ReadCloser, error) {
+	rc, err := c.cli.ContainerLogs(ctx, name, container.LogsOptions{
+		ShowStdout: true,
+		ShowStderr: true,
+		Follow:     follow,
+		Tail:       tail,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("getting logs for %s: %w", name, err)
+	}
+	return rc, nil
+}
+
 func (c *Client) Remove(ctx context.Context, name string, force bool) error {
 	if err := c.cli.ContainerRemove(ctx, name, container.RemoveOptions{Force: force}); err != nil {
 		return fmt.Errorf("removing %s: %w", name, err)

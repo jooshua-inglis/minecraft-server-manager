@@ -8,11 +8,13 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"time"
 
 	"github.com/docker/docker/api/types/container"
+	"github.com/docker/docker/pkg/stdcopy"
 
 	"github.com/jooshua-inglis/minecraft-server-manager/internal/dockerctl"
 	"github.com/jooshua-inglis/minecraft-server-manager/internal/rcon"
@@ -379,6 +381,25 @@ func (f *Fleet) isRunning(ctx context.Context, meta *serverstore.Metadata) (bool
 		return false, err
 	}
 	return info != nil && info.State != nil && info.State.Running, nil
+}
+
+// Logs streams a server's container output (stdout+stderr, already
+// demultiplexed) to out. If follow is true it blocks until the caller is
+// killed or the container stops producing logs.
+func (f *Fleet) Logs(ctx context.Context, name string, follow bool, tail string, out io.Writer) error {
+	meta, err := serverstore.Load(f.Root, name)
+	if err != nil {
+		return err
+	}
+
+	rc, err := f.Docker.Logs(ctx, meta.ContainerName, follow, tail)
+	if err != nil {
+		return err
+	}
+	defer rc.Close()
+
+	_, err = stdcopy.StdCopy(out, out, rc)
+	return err
 }
 
 // removeContainerIfExists tears down meta's container (if any) ahead of a
