@@ -14,13 +14,16 @@ import (
 	"github.com/docker/docker/api/types/container"
 
 	"github.com/jooshua-inglis/minecraft-server-manager/internal/dockerctl"
+	"github.com/jooshua-inglis/minecraft-server-manager/internal/rcon"
 	"github.com/jooshua-inglis/minecraft-server-manager/internal/serverstore"
 )
 
 const (
 	defaultImage         = "itzg/minecraft-server:latest"
 	containerGamePort    = 25565
+	containerRCONPort    = 25575
 	defaultStartPort     = 25565
+	defaultRCONStartPort = 25575
 	defaultStopTimeout   = 60 * time.Second
 	eulaURL              = "https://www.minecraft.net/en-us/eula"
 )
@@ -71,13 +74,23 @@ func (f *Fleet) Create(ctx context.Context, name string, opts CreateOptions) (*s
 		opts.Memory = "2G"
 	}
 
+	used, err := f.Docker.UsedHostPorts(ctx)
+	if err != nil {
+		return nil, err
+	}
+
 	port := opts.Port
 	if port == 0 {
-		p, err := f.pickPort(ctx)
+		port, err = selectPort(used, defaultStartPort, 1000, isPortFree)
 		if err != nil {
 			return nil, err
 		}
-		port = p
+	}
+	used[port] = true
+
+	rconPort, err := selectPort(used, defaultRCONStartPort, 1000, isPortFree)
+	if err != nil {
+		return nil, err
 	}
 
 	rconPassword, err := randomHex(16)
@@ -91,6 +104,7 @@ func (f *Fleet) Create(ctx context.Context, name string, opts CreateOptions) (*s
 		Version:       opts.Version,
 		Memory:        opts.Memory,
 		Port:          port,
+		RCONPort:      rconPort,
 		ContainerName: serverstore.ContainerName(name),
 		RCONPassword:  rconPassword,
 		CreatedAt:     time.Now().UTC(),
@@ -120,9 +134,13 @@ func (f *Fleet) createContainer(ctx context.Context, meta *serverstore.Metadata)
 			dockerctl.ManagedLabel: "true",
 			dockerctl.NameLabel:    meta.Name,
 		},
-		HostPort:      meta.Port,
-		ContainerPort: containerGamePort,
-		DataDir:       serverstore.DataDir(f.Root, meta.Name),
+		Ports: []dockerctl.PortMapping{
+			// Published on every interface so LAN/internet players can connect.
+			{ContainerPort: containerGamePort, HostPort: meta.Port, HostIP: "0.0.0.0"},
+			// Loopback-only: RCON is an admin channel, not for public exposure.
+			{ContainerPort: containerRCONPort, HostPort: meta.RCONPort, HostIP: "127.0.0.1"},
+		},
+		DataDir: serverstore.DataDir(f.Root, meta.Name),
 	})
 	return err
 }
@@ -317,6 +335,32 @@ func (f *Fleet) Edit(ctx context.Context, name string, opts EditOptions) error {
 	return nil
 }
 
+// Exec sends a single console command to a running server via RCON and
+// returns its response text.
+func (f *Fleet) Exec(ctx context.Context, name, command string) (string, error) {
+	meta, err := serverstore.Load(f.Root, name)
+	if err != nil {
+		return "", err
+	}
+
+	info, err := f.Docker.Inspect(ctx, meta.ContainerName)
+	if err != nil {
+		return "", err
+	}
+	if info == nil || info.State == nil || !info.State.Running {
+		return "", fmt.Errorf("server %q is not running", name)
+	}
+
+	addr := fmt.Sprintf("127.0.0.1:%d", meta.RCONPort)
+	client, err := rcon.Dial(addr, meta.RCONPassword)
+	if err != nil {
+		return "", err
+	}
+	defer client.Close()
+
+	return client.Execute(command)
+}
+
 // removeContainerIfExists tears down meta's container (if any) ahead of a
 // recreate, reporting whether it was running so the caller can restart it
 // afterward.
@@ -335,14 +379,6 @@ func (f *Fleet) removeContainerIfExists(ctx context.Context, meta *serverstore.M
 		return false, err
 	}
 	return wasRunning, nil
-}
-
-func (f *Fleet) pickPort(ctx context.Context) (int, error) {
-	used, err := f.Docker.UsedHostPorts(ctx)
-	if err != nil {
-		return 0, err
-	}
-	return selectPort(used, defaultStartPort, 1000, isPortFree)
 }
 
 // selectPort finds the first port in [start, start+count) that's neither

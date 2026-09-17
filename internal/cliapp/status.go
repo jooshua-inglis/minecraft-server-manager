@@ -28,6 +28,7 @@ func newStatusCmd() *cobra.Command {
 			fmt.Fprintf(out, "type:       %s\n", st.Metadata.Type)
 			fmt.Fprintf(out, "version:    %s\n", st.Metadata.Version)
 			fmt.Fprintf(out, "port:       %d\n", st.Metadata.Port)
+			fmt.Fprintf(out, "rcon port:  127.0.0.1:%d\n", st.Metadata.RCONPort)
 			fmt.Fprintf(out, "data dir:   %s\n", st.DataDir)
 			fmt.Fprintf(out, "created:    %s\n", st.Metadata.CreatedAt.Format("2006-01-02 15:04:05 MST"))
 

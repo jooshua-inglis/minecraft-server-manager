@@ -36,6 +36,7 @@ type Metadata struct {
 	Version       string    `json:"version"`
 	Memory        string    `json:"memory"`
 	Port          int       `json:"port"`
+	RCONPort      int       `json:"rcon_port"`
 	ContainerName string    `json:"container_name"`
 	RCONPassword  string    `json:"rcon_password"`
 	CreatedAt     time.Time `json:"created_at"`

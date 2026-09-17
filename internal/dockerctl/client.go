@@ -58,37 +58,48 @@ func (c *Client) EnsureImage(ctx context.Context, ref string) error {
 	return err
 }
 
+// PortMapping binds a container port to a host port on a specific host
+// interface — e.g. "0.0.0.0" to publish the game port for LAN/internet
+// players, or "127.0.0.1" to keep an administrative port (RCON) reachable
+// only from the Docker host itself.
+type PortMapping struct {
+	ContainerPort int
+	HostPort      int
+	HostIP        string
+}
+
 type CreateParams struct {
 	ContainerName string
 	Image         string
 	Env           []string
 	Labels        map[string]string
-	HostPort      int
-	ContainerPort int
+	Ports         []PortMapping
 	DataDir       string
 }
 
 // Create creates (but does not start) a container.
 func (c *Client) Create(ctx context.Context, p CreateParams) (string, error) {
-	containerPort, err := nat.NewPort("tcp", fmt.Sprintf("%d", p.ContainerPort))
-	if err != nil {
-		return "", err
+	exposed := nat.PortSet{}
+	bindings := nat.PortMap{}
+	for _, m := range p.Ports {
+		containerPort, err := nat.NewPort("tcp", fmt.Sprintf("%d", m.ContainerPort))
+		if err != nil {
+			return "", err
+		}
+		exposed[containerPort] = struct{}{}
+		bindings[containerPort] = []nat.PortBinding{{HostIP: m.HostIP, HostPort: fmt.Sprintf("%d", m.HostPort)}}
 	}
 
 	cfg := &container.Config{
-		Image:  p.Image,
-		Env:    p.Env,
-		Labels: p.Labels,
-		ExposedPorts: nat.PortSet{
-			containerPort: struct{}{},
-		},
+		Image:        p.Image,
+		Env:          p.Env,
+		Labels:       p.Labels,
+		ExposedPorts: exposed,
 	}
 
 	hostCfg := &container.HostConfig{
-		Binds: []string{p.DataDir + ":/data"},
-		PortBindings: nat.PortMap{
-			containerPort: []nat.PortBinding{{HostPort: fmt.Sprintf("%d", p.HostPort)}},
-		},
+		Binds:         []string{p.DataDir + ":/data"},
+		PortBindings:  bindings,
 		RestartPolicy: container.RestartPolicy{Name: container.RestartPolicyUnlessStopped},
 	}
 

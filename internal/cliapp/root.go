@@ -34,6 +34,7 @@ func Execute() error {
 		newStatusCmd(),
 		newRenameCmd(),
 		newEditCmd(),
+		newExecCmd(),
 	)
 
 	return root.Execute()
