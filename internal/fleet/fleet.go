@@ -9,6 +9,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"net"
+	"os"
 	"time"
 
 	"github.com/docker/docker/api/types/container"
@@ -124,6 +125,14 @@ func (f *Fleet) Create(ctx context.Context, name string, opts CreateOptions) (*s
 func (f *Fleet) createContainer(ctx context.Context, meta *serverstore.Metadata) error {
 	if err := f.Docker.EnsureImage(ctx, defaultImage); err != nil {
 		return err
+	}
+
+	// Create data/ ourselves, as the invoking host user, before Docker
+	// ever sees the bind mount — otherwise the daemon auto-creates a
+	// missing bind-mount source itself (as root), leaving the host user
+	// unable to write into it directly (whitelist edits, backups, etc).
+	if err := os.MkdirAll(serverstore.DataDir(f.Root, meta.Name), 0o755); err != nil {
+		return fmt.Errorf("creating data directory: %w", err)
 	}
 
 	_, err := f.Docker.Create(ctx, dockerctl.CreateParams{
@@ -359,6 +368,17 @@ func (f *Fleet) Exec(ctx context.Context, name, command string) (string, error) 
 	defer client.Close()
 
 	return client.Execute(command)
+}
+
+// isRunning reports whether meta's container currently exists and is
+// running, so callers (whitelist/op/ban management, in particular) can
+// choose between a live RCON command and a direct on-disk edit.
+func (f *Fleet) isRunning(ctx context.Context, meta *serverstore.Metadata) (bool, error) {
+	info, err := f.Docker.Inspect(ctx, meta.ContainerName)
+	if err != nil {
+		return false, err
+	}
+	return info != nil && info.State != nil && info.State.Running, nil
 }
 
 // removeContainerIfExists tears down meta's container (if any) ahead of a

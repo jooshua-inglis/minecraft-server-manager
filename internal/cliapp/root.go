@@ -35,6 +35,9 @@ func Execute() error {
 		newRenameCmd(),
 		newEditCmd(),
 		newExecCmd(),
+		newWhitelistCmd(),
+		newOpCmd(),
+		newBanCmd(),
 	)
 
 	return root.Execute()
