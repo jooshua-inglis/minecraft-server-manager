@@ -181,6 +181,16 @@ func (f *Fleet) envFor(meta *serverstore.Metadata) []string {
 	if len(meta.PluginURLs) > 0 {
 		env = append(env, "PLUGINS="+strings.Join(meta.PluginURLs, ","))
 	}
+	switch meta.ModpackSource {
+	case ModpackSourceModrinth:
+		env = append(env, "MODRINTH_MODPACK="+meta.ModpackRef)
+	case ModpackSourceCurseForge:
+		if strings.HasPrefix(meta.ModpackRef, "http://") || strings.HasPrefix(meta.ModpackRef, "https://") {
+			env = append(env, "CF_PAGE_URL="+meta.ModpackRef)
+		} else {
+			env = append(env, "CF_SLUG="+meta.ModpackRef)
+		}
+	}
 	if f.CFAPIKey != "" {
 		env = append(env, "CF_API_KEY="+f.CFAPIKey)
 	}

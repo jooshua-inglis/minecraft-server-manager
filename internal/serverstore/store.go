@@ -48,6 +48,12 @@ type Metadata struct {
 	CurseForgeFiles  []string `json:"curseforge_files,omitempty"`
 	ModURLs          []string `json:"mod_urls,omitempty"`
 	PluginURLs       []string `json:"plugin_urls,omitempty"`
+
+	// Modpack install. At most one of these is set at a time; installing
+	// a modpack overrides Type to the matching itzg launcher type
+	// (MODRINTH or AUTO_CURSEFORGE).
+	ModpackSource string `json:"modpack_source,omitempty"`
+	ModpackRef    string `json:"modpack_ref,omitempty"`
 }
 
 func ServerDir(root, name string) string {

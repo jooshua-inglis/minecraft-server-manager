@@ -1,0 +1,86 @@
+package cliapp
+
+import (
+	"fmt"
+
+	"github.com/spf13/cobra"
+
+	"github.com/jooshua-inglis/minecraft-server-manager/internal/fleet"
+)
+
+func newModpackCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "modpack",
+		Short: "Install or remove a server's modpack",
+	}
+
+	var installSource string
+	install := &cobra.Command{
+		Use:   "install <server> <ref>",
+		Short: "Point a server at a Modrinth or CurseForge modpack and recreate its container",
+		Long: "Switches the server's software to the given modpack's launcher\n" +
+			"(TYPE=MODRINTH or TYPE=AUTO_CURSEFORGE) and recreates the container\n" +
+			"so itzg resolves and installs it on next start. <ref> is a Modrinth\n" +
+			"project slug/ID/URL, or a CurseForge slug/page URL. CurseForge\n" +
+			"modpacks require cf_api_key to be set in mcm's config.",
+		Args: cobra.ExactArgs(2),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			f, err := newFleet()
+			if err != nil {
+				return err
+			}
+			defer f.Docker.Close()
+			if err := f.ModpackInstall(cmd.Context(), args[0], installSource, args[1]); err != nil {
+				return err
+			}
+			fmt.Fprintf(cmd.OutOrStdout(), "installed modpack %q on %q (%s); start it to let itzg resolve and download it\n", args[1], args[0], installSource)
+			return nil
+		},
+	}
+	install.Flags().StringVar(&installSource, "source", fleet.ModpackSourceModrinth, "where to install from: modrinth or curseforge")
+
+	remove := &cobra.Command{
+		Use:   "remove <server>",
+		Short: "Remove a server's modpack and revert it to a plain VANILLA server",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			f, err := newFleet()
+			if err != nil {
+				return err
+			}
+			defer f.Docker.Close()
+			if err := f.ModpackRemove(cmd.Context(), args[0]); err != nil {
+				return err
+			}
+			fmt.Fprintf(cmd.OutOrStdout(), "removed modpack from %q; reverted to VANILLA\n", args[0])
+			return nil
+		},
+	}
+
+	status := &cobra.Command{
+		Use:   "status <server>",
+		Short: "Show a server's installed modpack, if any",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			f, err := newFleet()
+			if err != nil {
+				return err
+			}
+			defer f.Docker.Close()
+			st, err := f.ModpackStatus(cmd.Context(), args[0])
+			if err != nil {
+				return err
+			}
+			out := cmd.OutOrStdout()
+			if st.Ref == "" {
+				fmt.Fprintf(out, "no modpack installed (type: %s)\n", st.Type)
+				return nil
+			}
+			fmt.Fprintf(out, "source: %s\nref:    %s\ntype:   %s\n", st.Source, st.Ref, st.Type)
+			return nil
+		},
+	}
+
+	cmd.AddCommand(install, remove, status)
+	return cmd
+}
