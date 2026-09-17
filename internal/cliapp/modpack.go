@@ -2,6 +2,7 @@ package cliapp
 
 import (
 	"fmt"
+	"text/tabwriter"
 
 	"github.com/spf13/cobra"
 
@@ -106,10 +107,13 @@ func newModpackCmd() *cobra.Command {
 				fmt.Fprintln(out, "no results")
 				return nil
 			}
+
+			tw := tabwriter.NewWriter(out, 0, 4, 2, ' ', 0)
+			fmt.Fprintln(tw, "REF\tNAME\tDOWNLOADS\tDESCRIPTION")
 			for _, r := range results {
-				fmt.Fprintf(out, "%s\t%s\t%s\n", r.Ref, r.Name, r.Description)
+				fmt.Fprintf(tw, "%s\t%s\t%d\t%s\n", r.Ref, r.Name, r.Downloads, truncate(r.Description, 70))
 			}
-			return nil
+			return tw.Flush()
 		},
 	}
 	search.Flags().StringVar(&searchSource, "source", fleet.ModpackSourceModrinth, "where to search: modrinth or curseforge")
@@ -117,4 +121,11 @@ func newModpackCmd() *cobra.Command {
 
 	cmd.AddCommand(install, remove, status, search)
 	return cmd
+}
+
+func truncate(s string, max int) string {
+	if len(s) <= max {
+		return s
+	}
+	return s[:max-1] + "…"
 }
