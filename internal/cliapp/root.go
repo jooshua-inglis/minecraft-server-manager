@@ -36,6 +36,7 @@ func Execute() error {
 		newEditCmd(),
 		newExecCmd(),
 		newLogsCmd(),
+		newTopCmd(),
 		newWhitelistCmd(),
 		newOpCmd(),
 		newBanCmd(),

@@ -5,6 +5,7 @@ package dockerctl
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"time"
@@ -138,6 +139,63 @@ func (c *Client) Logs(ctx context.Context, name string, follow bool, tail string
 		return nil, fmt.Errorf("getting logs for %s: %w", name, err)
 	}
 	return rc, nil
+}
+
+// Stats is a snapshot of a running container's CPU and memory usage.
+type Stats struct {
+	CPUPercent    float64
+	MemUsageBytes uint64
+	MemLimitBytes uint64
+}
+
+// Stats takes a resource-usage snapshot of a running container. CPU
+// percent needs two samples to mean anything (it's a delta over a time
+// window), and the one-shot stats endpoint doesn't prime a real previous
+// sample (its precpu_stats comes back zeroed, which would compare
+// CPU-seconds-since-container-start against CPU-seconds-since-host-boot
+// — nonsense). So this reads two consecutive frames from the streaming
+// endpoint instead, the same way `docker stats` computes CPU% itself.
+func (c *Client) Stats(ctx context.Context, name string) (*Stats, error) {
+	reader, err := c.cli.ContainerStats(ctx, name, true)
+	if err != nil {
+		return nil, fmt.Errorf("getting stats for %s: %w", name, err)
+	}
+	defer reader.Body.Close()
+
+	dec := json.NewDecoder(reader.Body)
+	var prev, cur container.StatsResponse
+	if err := dec.Decode(&prev); err != nil {
+		return nil, fmt.Errorf("decoding stats for %s: %w", name, err)
+	}
+	if err := dec.Decode(&cur); err != nil {
+		return nil, fmt.Errorf("decoding stats for %s: %w", name, err)
+	}
+
+	return &Stats{
+		CPUPercent:    cpuPercent(prev, cur),
+		MemUsageBytes: cur.MemoryStats.Usage,
+		MemLimitBytes: cur.MemoryStats.Limit,
+	}, nil
+}
+
+// cpuPercent applies the same delta-over-delta formula the Docker CLI
+// uses for `docker stats`, between two consecutive stats frames.
+func cpuPercent(prev, cur container.StatsResponse) float64 {
+	cpuDelta := float64(cur.CPUStats.CPUUsage.TotalUsage) - float64(prev.CPUStats.CPUUsage.TotalUsage)
+	systemDelta := float64(cur.CPUStats.SystemUsage) - float64(prev.CPUStats.SystemUsage)
+	if cpuDelta <= 0 || systemDelta <= 0 {
+		return 0
+	}
+
+	onlineCPUs := float64(cur.CPUStats.OnlineCPUs)
+	if onlineCPUs == 0 {
+		onlineCPUs = float64(len(cur.CPUStats.CPUUsage.PercpuUsage))
+	}
+	if onlineCPUs == 0 {
+		onlineCPUs = 1
+	}
+
+	return (cpuDelta / systemDelta) * onlineCPUs * 100.0
 }
 
 func (c *Client) Remove(ctx context.Context, name string, force bool) error {
