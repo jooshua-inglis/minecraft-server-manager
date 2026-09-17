@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/jooshua-inglis/minecraft-server-manager/internal/modpackapi"
 	"github.com/jooshua-inglis/minecraft-server-manager/internal/serverstore"
 )
 
@@ -58,6 +59,19 @@ func (f *Fleet) ModpackRemove(ctx context.Context, name string) error {
 	meta.Type = "VANILLA"
 
 	return f.saveAndRecreate(ctx, meta)
+}
+
+// ModpackSearch looks up candidate refs for `mcm modpack install` by
+// querying the given source's search API.
+func (f *Fleet) ModpackSearch(ctx context.Context, source, query string, limit int) ([]modpackapi.Result, error) {
+	switch source {
+	case ModpackSourceModrinth:
+		return modpackapi.SearchModrinth(ctx, query, limit)
+	case ModpackSourceCurseForge:
+		return modpackapi.SearchCurseForge(ctx, f.CFAPIKey, query, limit)
+	default:
+		return nil, fmt.Errorf("unknown source %q (want %q or %q)", source, ModpackSourceModrinth, ModpackSourceCurseForge)
+	}
 }
 
 type ModpackStatus struct {

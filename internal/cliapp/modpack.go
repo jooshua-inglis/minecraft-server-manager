@@ -81,6 +81,40 @@ func newModpackCmd() *cobra.Command {
 		},
 	}
 
-	cmd.AddCommand(install, remove, status)
+	var searchSource string
+	var searchLimit int
+	search := &cobra.Command{
+		Use:   "search <query>",
+		Short: "Search Modrinth or CurseForge for a modpack to install",
+		Long: "Prints candidate refs for `mcm modpack install`. Modrinth needs no\n" +
+			"API key; CurseForge search requires cf_api_key to be set in mcm's\n" +
+			"config.",
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			f, err := newFleet()
+			if err != nil {
+				return err
+			}
+			defer f.Docker.Close()
+			results, err := f.ModpackSearch(cmd.Context(), searchSource, args[0], searchLimit)
+			if err != nil {
+				return err
+			}
+
+			out := cmd.OutOrStdout()
+			if len(results) == 0 {
+				fmt.Fprintln(out, "no results")
+				return nil
+			}
+			for _, r := range results {
+				fmt.Fprintf(out, "%s\t%s\t%s\n", r.Ref, r.Name, r.Description)
+			}
+			return nil
+		},
+	}
+	search.Flags().StringVar(&searchSource, "source", fleet.ModpackSourceModrinth, "where to search: modrinth or curseforge")
+	search.Flags().IntVar(&searchLimit, "limit", 10, "maximum number of results")
+
+	cmd.AddCommand(install, remove, status, search)
 	return cmd
 }
