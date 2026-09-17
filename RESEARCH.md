@@ -295,10 +295,14 @@ monitoring dashboards, a CLI UX).
   env vars and restarting the container (since the itzg image resolves
   everything at container start). For plugins on Spigot/Paper specifically,
   same idea via `PLUGINS`/CurseForge/Modrinth "plugin" project types.
-- **Users/whitelist/ops**: expose as CLI subcommands that either (a) update
-  env vars + restart, or (b) issue live RCON commands (`whitelist add`, `op`,
-  `ban`) for zero-downtime changes — prefer (b) when the server is already
-  running, falling back to (a) for initial provisioning.
+- **Users/whitelist/ops**: expose as CLI subcommands that either (a) edit
+  `whitelist.json`/`ops.json`/`banned-players.json`/`banned-ips.json`
+  directly on disk (the data directory is just a host-mounted folder, so
+  no restart is needed and this even works before a server's first
+  start), or (b) issue live RCON commands (`whitelist add`, `op`, `ban`)
+  for zero-downtime changes on an already-running server — prefer (b)
+  when running, (a) when stopped. No env-var/restart round trip needed in
+  either case.
 - **Monitoring**: combine Docker-level stats (CPU/RAM/net/disk from the
   Docker Engine API) with Minecraft-level stats (`mc-monitor`/RCON `list`,
   `tps` if a plugin exposes it) into one `mcm status`/`mcm top` view.
