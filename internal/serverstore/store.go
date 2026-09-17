@@ -40,6 +40,14 @@ type Metadata struct {
 	ContainerName string    `json:"container_name"`
 	RCONPassword  string    `json:"rcon_password"`
 	CreatedAt     time.Time `json:"created_at"`
+
+	// Individual mod/plugin installs (modpacks are a separate, later
+	// milestone). These map directly onto the itzg image's env vars of
+	// the same shape: MODRINTH_PROJECTS, CURSEFORGE_FILES, MODS, PLUGINS.
+	ModrinthProjects []string `json:"modrinth_projects,omitempty"`
+	CurseForgeFiles  []string `json:"curseforge_files,omitempty"`
+	ModURLs          []string `json:"mod_urls,omitempty"`
+	PluginURLs       []string `json:"plugin_urls,omitempty"`
 }
 
 func ServerDir(root, name string) string {

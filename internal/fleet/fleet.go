@@ -11,6 +11,7 @@ import (
 	"io"
 	"net"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/docker/docker/api/types/container"
@@ -32,8 +33,9 @@ const (
 )
 
 type Fleet struct {
-	Root   string
-	Docker *dockerctl.Client
+	Root     string
+	Docker   *dockerctl.Client
+	CFAPIKey string // optional; passed through to containers as CF_API_KEY
 }
 
 func New(root string, docker *dockerctl.Client) *Fleet {
@@ -157,7 +159,7 @@ func (f *Fleet) createContainer(ctx context.Context, meta *serverstore.Metadata)
 }
 
 func (f *Fleet) envFor(meta *serverstore.Metadata) []string {
-	return []string{
+	env := []string{
 		"EULA=TRUE",
 		"TYPE=" + meta.Type,
 		"VERSION=" + meta.Version,
@@ -166,6 +168,24 @@ func (f *Fleet) envFor(meta *serverstore.Metadata) []string {
 		"ENABLE_RCON=TRUE",
 		"RCON_PASSWORD=" + meta.RCONPassword,
 	}
+
+	if len(meta.ModrinthProjects) > 0 {
+		env = append(env, "MODRINTH_PROJECTS="+strings.Join(meta.ModrinthProjects, ","))
+	}
+	if len(meta.CurseForgeFiles) > 0 {
+		env = append(env, "CURSEFORGE_FILES="+strings.Join(meta.CurseForgeFiles, ","))
+	}
+	if len(meta.ModURLs) > 0 {
+		env = append(env, "MODS="+strings.Join(meta.ModURLs, ","))
+	}
+	if len(meta.PluginURLs) > 0 {
+		env = append(env, "PLUGINS="+strings.Join(meta.PluginURLs, ","))
+	}
+	if f.CFAPIKey != "" {
+		env = append(env, "CF_API_KEY="+f.CFAPIKey)
+	}
+
+	return env
 }
 
 func (f *Fleet) Start(ctx context.Context, name string) error {
@@ -328,6 +348,14 @@ func (f *Fleet) Edit(ctx context.Context, name string, opts EditOptions) error {
 		meta.Version = opts.Version
 	}
 
+	return f.saveAndRecreate(ctx, meta)
+}
+
+// saveAndRecreate persists meta and recreates its container against the
+// new config, restarting it afterward if it was running before. Shared by
+// every operation that changes something env-var-shaped (type/version,
+// mods/plugins) and therefore needs a fresh container to take effect.
+func (f *Fleet) saveAndRecreate(ctx context.Context, meta *serverstore.Metadata) error {
 	wasRunning, err := f.removeContainerIfExists(ctx, meta)
 	if err != nil {
 		return err

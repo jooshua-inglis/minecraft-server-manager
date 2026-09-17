@@ -37,6 +37,7 @@ func Execute() error {
 		newExecCmd(),
 		newLogsCmd(),
 		newTopCmd(),
+		newModsCmd(),
 		newWhitelistCmd(),
 		newOpCmd(),
 		newBanCmd(),
@@ -70,5 +71,7 @@ func newFleet() (*fleet.Fleet, error) {
 		return nil, err
 	}
 
-	return fleet.New(cfg.ServersRoot, docker), nil
+	f := fleet.New(cfg.ServersRoot, docker)
+	f.CFAPIKey = cfg.CFAPIKey
+	return f, nil
 }

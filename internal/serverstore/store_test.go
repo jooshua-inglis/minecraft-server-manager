@@ -2,6 +2,7 @@ package serverstore
 
 import (
 	"path/filepath"
+	"reflect"
 	"testing"
 	"time"
 )
@@ -46,7 +47,7 @@ func TestSaveLoad(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
-	if *got != *meta {
+	if !reflect.DeepEqual(got, meta) {
 		t.Errorf("Load = %+v, want %+v", got, meta)
 	}
 
