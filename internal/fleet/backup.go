@@ -81,8 +81,14 @@ func (f *Fleet) ListBackups(name string) ([]BackupInfo, error) {
 	if !serverstore.Exists(f.Root, name) {
 		return nil, serverstore.ErrNotFound
 	}
+	return listArchivesIn(backupsDir(f.Root, name))
+}
 
-	entries, err := os.ReadDir(backupsDir(f.Root, name))
+// listArchivesIn lists every *.tar.gz in dir as a BackupInfo, oldest
+// first. Shared by ListBackups (M10) and WorldBackupList (M17), which
+// only differ in which directory holds the archives.
+func listArchivesIn(dir string) ([]BackupInfo, error) {
+	entries, err := os.ReadDir(dir)
 	if os.IsNotExist(err) {
 		return nil, nil
 	}
@@ -131,39 +137,50 @@ func (f *Fleet) Restore(ctx context.Context, name, id string) (err error) {
 		return fmt.Errorf("backup %q not found for %q", id, name)
 	}
 
-	dataDir := serverstore.DataDir(f.Root, name)
-	tmpDir := dataDir + ".restore-tmp"
+	if err := replaceDirFromArchive(serverstore.DataDir(f.Root, name), src); err != nil {
+		return fmt.Errorf("restoring backup %q: %w", id, err)
+	}
+	return nil
+}
+
+// replaceDirFromArchive replaces dir's contents with what's in the
+// given tar.gz archive: extract to a scratch directory, move dir's
+// current children aside, move the extracted children in, clean up.
+// dir must already exist. Shared by whole-server restore (M10) and
+// world-only restore/import (M17).
+func replaceDirFromArchive(dir, archivePath string) error {
+	tmpDir := dir + ".restore-tmp"
 	if err := os.RemoveAll(tmpDir); err != nil {
 		return err
 	}
 	if err := os.MkdirAll(tmpDir, 0o755); err != nil {
 		return err
 	}
-	if err := archiveutil.ExtractTarGz(src, tmpDir); err != nil {
+	if err := archiveutil.ExtractTarGz(archivePath, tmpDir); err != nil {
 		os.RemoveAll(tmpDir)
-		return fmt.Errorf("extracting backup %q: %w", id, err)
+		return fmt.Errorf("extracting archive: %w", err)
 	}
 
-	// Swap dataDir's *contents*, not the directory itself: on Docker
+	// Swap dir's *contents*, not the directory itself: on Docker
 	// Desktop's WSL2 backend, replacing a bind-mounted directory's own
 	// inode (e.g. via rename) permanently breaks that mount for any
 	// container already created against it, even while stopped. Moving
-	// children in and out leaves dataDir's inode untouched.
-	preRestoreDir := dataDir + ".pre-restore"
+	// children in and out leaves dir's inode untouched.
+	preRestoreDir := dir + ".pre-restore"
 	if err := os.RemoveAll(preRestoreDir); err != nil {
 		return err
 	}
 	if err := os.MkdirAll(preRestoreDir, 0o755); err != nil {
 		return err
 	}
-	if err := moveChildren(dataDir, preRestoreDir); err != nil {
-		return fmt.Errorf("moving aside current data before restore: %w", err)
+	if err := moveChildren(dir, preRestoreDir); err != nil {
+		return fmt.Errorf("moving aside current contents: %w", err)
 	}
-	if err := moveChildren(tmpDir, dataDir); err != nil {
+	if err := moveChildren(tmpDir, dir); err != nil {
 		// Best-effort roll back so a failed restore doesn't leave the
-		// server without its prior data.
-		moveChildren(preRestoreDir, dataDir)
-		return fmt.Errorf("moving restored data into place: %w", err)
+		// server without its prior contents.
+		moveChildren(preRestoreDir, dir)
+		return fmt.Errorf("moving restored contents into place: %w", err)
 	}
 	os.Remove(tmpDir)
 	return os.RemoveAll(preRestoreDir)

@@ -110,3 +110,12 @@ func TestDataDirUnderServerDir(t *testing.T) {
 		t.Errorf("DataDir = %q, want %q", got, want)
 	}
 }
+
+func TestLevelDefaultsToWorld(t *testing.T) {
+	if got := (&Metadata{}).Level(); got != "world" {
+		t.Errorf("Level() on legacy metadata = %q, want %q", got, "world")
+	}
+	if got := (&Metadata{LevelName: "creative"}).Level(); got != "creative" {
+		t.Errorf("Level() = %q, want %q", got, "creative")
+	}
+}

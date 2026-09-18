@@ -120,6 +120,7 @@ func (f *Fleet) Create(ctx context.Context, name string, opts CreateOptions) (*s
 		ContainerName: serverstore.ContainerName(name),
 		RCONPassword:  rconPassword,
 		CreatedAt:     time.Now().UTC(),
+		LevelName:     "world",
 	}
 
 	if err := serverstore.Save(f.Root, meta); err != nil {
@@ -175,6 +176,7 @@ func (f *Fleet) envFor(meta *serverstore.Metadata) []string {
 		"USE_AIKAR_FLAGS=true",
 		"ENABLE_RCON=TRUE",
 		"RCON_PASSWORD=" + meta.RCONPassword,
+		"LEVEL=" + meta.Level(),
 	}
 
 	if len(meta.ModrinthProjects) > 0 {

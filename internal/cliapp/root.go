@@ -45,6 +45,8 @@ func Execute() error {
 		newWhitelistCmd(),
 		newOpCmd(),
 		newBanCmd(),
+		newWorldCmd(),
+		newAttachCmd(),
 	)
 
 	return root.Execute()

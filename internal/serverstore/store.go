@@ -54,6 +54,23 @@ type Metadata struct {
 	// (MODRINTH or AUTO_CURSEFORGE).
 	ModpackSource string `json:"modpack_source,omitempty"`
 	ModpackRef    string `json:"modpack_ref,omitempty"`
+
+	// LevelName mirrors the itzg image's LEVEL env var: which
+	// subdirectory of data/ is the world save, so `mcm world ...` (M17)
+	// knows exactly what to snapshot/reset/export without touching the
+	// rest of data/ (configs, mods, plugins, whitelist/ops/bans, logs).
+	LevelName string `json:"level_name,omitempty"`
+}
+
+const defaultLevelName = "world"
+
+// Level returns m's world save directory name, defaulting to "world"
+// for metadata saved before LevelName existed.
+func (m *Metadata) Level() string {
+	if m.LevelName == "" {
+		return defaultLevelName
+	}
+	return m.LevelName
 }
 
 func ServerDir(root, name string) string {
