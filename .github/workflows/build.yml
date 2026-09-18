@@ -53,7 +53,8 @@ jobs:
           path: dist/mcm-linux-${{ matrix.goarch }}
           if-no-files-found: error
 
-  # Somewhere to download the binaries from any device, no GitHub login:
+  # Somewhere to download the binaries (and Docker files) from any device,
+  # no GitHub login:
   #   - every push to main refreshes a rolling "latest" prerelease
   #   - pushing a v* tag creates a normal versioned release
   release:
@@ -68,11 +69,20 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
     steps:
+      - uses: actions/checkout@v7
       - uses: actions/download-artifact@v8
         with:
           pattern: mcm-linux-*
           path: dist
           merge-multiple: true
+
+      # Ship the Docker setup alongside the binaries (no image is published):
+      # download the files, `docker build -t mcm .`. Dockerfile.release wraps
+      # the prebuilt binary, so it goes out named plain `Dockerfile`.
+      - name: Add Docker files
+        run: |
+          cp Dockerfile.release dist/Dockerfile
+          cp docker-compose.yml dist/docker-compose.yml
 
       - name: Checksums
         working-directory: dist

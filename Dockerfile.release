@@ -1,0 +1,29 @@
+# The image for a downloaded release: wraps the prebuilt binary instead of
+# compiling from source. CI ships this file as plain `Dockerfile` next to
+# the binaries and docker-compose.yml, so on any device:
+#
+#   curl -fLO <release>/mcm-linux-<amd64|arm64> -O <release>/Dockerfile -O <release>/docker-compose.yml
+#   docker build -t mcm .        # picks mcm-linux-<this machine's arch>
+#
+# Keep the runtime settings below in sync with Dockerfile (the from-source
+# build). See README.md's "Running mcm in Docker" for the socket and
+# same-path volume requirements.
+
+FROM alpine:3.20
+RUN apk add --no-cache ca-certificates
+
+# TARGETARCH is amd64/arm64, matching the release asset names.
+ARG TARGETARCH
+COPY --chmod=0755 mcm-linux-${TARGETARCH} /usr/local/bin/mcm
+
+# Runs as root deliberately: access to the mounted Docker socket is already
+# root-equivalent on the host, so a non-root user adds no real isolation and
+# breaks on hosts whose socket GID differs.
+ENV HOME=/root
+WORKDIR $HOME
+
+EXPOSE 8080
+ENTRYPOINT ["mcm"]
+# Foreground, as a container runtime expects; bound to every interface since
+# 127.0.0.1 isn't reachable through Docker's port publishing.
+CMD ["web", "--addr", "0.0.0.0:8080"]

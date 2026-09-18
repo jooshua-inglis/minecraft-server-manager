@@ -5,6 +5,9 @@
 # host. See README.md's "Running mcm in Docker" section for the
 # socket/volume setup this requires.
 #
+# (Dockerfile.release is the variant shipped with releases: same runtime
+# settings, but it wraps a prebuilt binary instead of compiling.)
+#
 # The SvelteKit dashboard (web/) is NOT built here — its output is
 # committed to internal/webui/dist and embedded via go:embed, so this
 # build needs only Go, not Node/Deno. Run `deno task build` in web/

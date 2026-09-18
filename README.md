@@ -17,22 +17,29 @@ mcm web start           # dashboard in the background; `mcm web stop` to stop
 `mcm --help` lists everything (mods, modpacks, backups, world export/import,
 whitelist/ops/bans, ...).
 
-## Downloading a prebuilt binary
+## Downloading a prebuilt release
 
 CI publishes static Linux binaries (`amd64` and `arm64`) to
 [Releases](https://github.com/jooshua-inglis/minecraft-server-manager/releases):
 every push to `main` refreshes the rolling `latest` prerelease, and pushing a
-`v*` tag creates a versioned release. On another machine:
+`v*` tag creates a versioned release. Each release also carries a `Dockerfile`
+and `docker-compose.yml`, so nothing needs building or pulling from a registry.
 
 ```sh
+base=https://github.com/jooshua-inglis/minecraft-server-manager/releases/download/latest  # or .../download/v0.1.0
 arch=$(uname -m); case $arch in x86_64) arch=amd64;; aarch64) arch=arm64;; esac
+
+# Binary only:
 mkdir -p ~/.local/bin
-curl -fL "https://github.com/jooshua-inglis/minecraft-server-manager/releases/download/latest/mcm-linux-$arch" -o ~/.local/bin/mcm
-chmod +x ~/.local/bin/mcm
+curl -fL "$base/mcm-linux-$arch" -o ~/.local/bin/mcm && chmod +x ~/.local/bin/mcm
+
+# Or as a Docker image, built locally from the same download:
+mkdir mcm && cd mcm
+curl -fLO "$base/mcm-linux-$arch" -O "$base/Dockerfile" -O "$base/docker-compose.yml"
+docker build -t mcm .            # see "Running mcm in Docker" below for run/compose
 ```
 
-`SHA256SUMS` is attached to each release. (Use `.../releases/download/v0.1.0/...`
-for a tagged version.)
+`SHA256SUMS` is attached to each release.
 
 ## Configuration
 
