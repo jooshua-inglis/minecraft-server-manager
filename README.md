@@ -7,7 +7,7 @@ Design notes are in [RESEARCH.md](RESEARCH.md); the build plan is in
 [plan/](plan/README.md).
 
 ```sh
-go build -o mcm ./cmd/mcm
+./install.sh        # builds and installs to ~/.local/bin/mcm (./uninstall.sh removes it)
 mcm create myworld --accept-eula
 mcm start myworld
 mcm attach myworld      # live logs + stats + console in one screen
