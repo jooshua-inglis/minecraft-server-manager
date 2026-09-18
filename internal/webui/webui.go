@@ -1,7 +1,7 @@
 // Package webui embeds mcm's built SvelteKit dashboard (source in
 // ../../web) so `mcm web` can serve it straight from the binary — no
 // separate process or asset directory to ship, per the packaging
-// decision in RESEARCH.md §7.6. Run `npm run build` in web/ to
+// decision in RESEARCH.md §7.6. Run `deno task build` in web/ to
 // regenerate dist/ before building mcm.
 package webui
 

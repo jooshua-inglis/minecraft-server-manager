@@ -75,9 +75,9 @@ func (f *Fleet) ModpackSearch(ctx context.Context, source, query string, limit i
 }
 
 type ModpackStatus struct {
-	Source string
-	Ref    string
-	Type   string
+	Source string `json:"source,omitempty"`
+	Ref    string `json:"ref,omitempty"`
+	Type   string `json:"type"`
 }
 
 func (f *Fleet) ModpackStatus(ctx context.Context, name string) (*ModpackStatus, error) {

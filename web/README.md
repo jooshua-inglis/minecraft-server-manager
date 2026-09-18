@@ -2,14 +2,19 @@
 
 SvelteKit frontend for `mcm web`'s API (`internal/webapi`). Built as a
 static SPA (`adapter-static`, `ssr = false`) and embedded into the `mcm`
-Go binary via `go:embed` (see `internal/webui`) — there's no Node
-runtime involved once it's built.
+Go binary via `go:embed` (see `internal/webui`) — there's no JS runtime
+involved once it's built.
+
+Uses [Deno](https://deno.com) to install and run the (otherwise
+ordinary npm/Vite/SvelteKit) toolchain — `deno.json`'s tasks wrap the
+npm packages listed in `package.json`'s `devDependencies` via `npm:`
+specifiers.
 
 ## Developing
 
 ```sh
-npm install
-npm run dev
+deno install
+deno task dev
 ```
 
 The dev server proxies `/api/*` to `http://127.0.0.1:8080`, so run
@@ -19,9 +24,15 @@ data.
 ## Building
 
 ```sh
-npm run build
+deno task build
 ```
 
 Writes the static site to `../internal/webui/dist`, which `go build`
 picks up via `go:embed`. Run this before building `mcm` after changing
 anything here — the committed `dist/` output is what ships.
+
+## Type-checking
+
+```sh
+deno task check
+```

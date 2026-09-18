@@ -2,6 +2,7 @@
 package config
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
 
@@ -13,6 +14,10 @@ const defaultServersRoot = "mc-servers"
 type Config struct {
 	ServersRoot string `toml:"servers_root"`
 	CFAPIKey    string `toml:"cf_api_key"`
+	// WebToken authenticates write requests to `mcm web`'s API (M14 /
+	// RESEARCH.md §7.5). Generated on first use by `mcm web` and
+	// persisted here so it survives restarts.
+	WebToken string `toml:"web_token,omitempty"`
 }
 
 func Path() (string, error) {
@@ -48,4 +53,21 @@ func Load() (*Config, error) {
 	}
 
 	return cfg, nil
+}
+
+// Save persists cfg to disk, creating its parent directory if needed.
+func Save(cfg *Config) error {
+	path, err := Path()
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+
+	var buf bytes.Buffer
+	if err := toml.NewEncoder(&buf).Encode(cfg); err != nil {
+		return err
+	}
+	return os.WriteFile(path, buf.Bytes(), 0o600)
 }

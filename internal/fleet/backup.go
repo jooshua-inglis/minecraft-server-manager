@@ -20,9 +20,9 @@ func backupsDir(root, name string) string {
 }
 
 type BackupInfo struct {
-	ID        string
-	SizeBytes int64
-	CreatedAt time.Time
+	ID        string    `json:"id"`
+	SizeBytes int64     `json:"size_bytes"`
+	CreatedAt time.Time `json:"created_at"`
 }
 
 // Backup snapshots a server's entire data/ directory (world, mods,

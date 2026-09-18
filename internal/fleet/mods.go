@@ -24,10 +24,10 @@ func isPluginType(serverType string) bool {
 }
 
 type Mods struct {
-	ModrinthProjects []string
-	CurseForgeFiles  []string
-	ModURLs          []string
-	PluginURLs       []string
+	ModrinthProjects []string `json:"modrinth_projects,omitempty"`
+	CurseForgeFiles  []string `json:"curseforge_files,omitempty"`
+	ModURLs          []string `json:"mod_urls,omitempty"`
+	PluginURLs       []string `json:"plugin_urls,omitempty"`
 }
 
 const (

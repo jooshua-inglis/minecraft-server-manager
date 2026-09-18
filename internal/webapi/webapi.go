@@ -1,12 +1,14 @@
-// Package webapi is mcm's read-only HTTP API: `mcm web` starts it, and
-// it mirrors `mcm list`/`status`/`logs` as JSON over the same fleet
-// package the CLI calls, plus SSE streams for live logs and stats
-// (RESEARCH.md §7.7 / plan M12). It has no write endpoints — those are
-// a later milestone (M14), gated behind auth.
+// Package webapi is mcm's HTTP API: `mcm web` starts it, and it mirrors
+// the CLI's commands as JSON over the same fleet package the CLI calls
+// (RESEARCH.md §7.7 / plan M12), plus SSE streams for live logs and
+// stats. Read endpoints (GET) are open; every state-changing endpoint
+// (M14) requires a bearer token, since `mcm web` may be reachable by
+// more than just the operator's own shell (RESEARCH.md §7.5).
 package webapi
 
 import (
 	"bytes"
+	"crypto/subtle"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -25,18 +27,60 @@ const (
 
 type Handler struct {
 	fleet *fleet.Fleet
+	token string
 }
 
-// NewHandler builds mcm's read-only HTTP API against f.
-func NewHandler(f *fleet.Fleet) http.Handler {
-	h := &Handler{fleet: f}
+// NewHandler builds mcm's HTTP API against f. token authenticates
+// every write endpoint (see requireAuth); read endpoints need it too
+// only when the operator wants that, see the "GET" routes below for
+// which is which.
+func NewHandler(f *fleet.Fleet, token string) http.Handler {
+	h := &Handler{fleet: f, token: token}
 
 	mux := http.NewServeMux()
+
+	// Read-only: no auth required, matching M12's original behavior.
 	mux.HandleFunc("GET /api/servers", h.listServers)
 	mux.HandleFunc("GET /api/servers/{name}", h.serverDetail)
 	mux.HandleFunc("GET /api/servers/{name}/logs", h.serverLogs)
 	mux.HandleFunc("GET /api/servers/{name}/stats/stream", h.streamStats)
+	mux.HandleFunc("GET /api/servers/{name}/whitelist", h.listWhitelist)
+	mux.HandleFunc("GET /api/servers/{name}/ops", h.listOps)
+	mux.HandleFunc("GET /api/servers/{name}/mods", h.listMods)
+	mux.HandleFunc("GET /api/servers/{name}/modpack", h.getModpack)
+	mux.HandleFunc("GET /api/servers/{name}/backups", h.listBackups)
+
+	// Write: bearer token required (M14).
+	mux.HandleFunc("POST /api/auth/verify", h.requireAuth(h.verifyAuth))
+	mux.HandleFunc("POST /api/servers", h.requireAuth(h.createServer))
+	mux.HandleFunc("DELETE /api/servers/{name}", h.requireAuth(h.destroyServer))
+	mux.HandleFunc("POST /api/servers/{name}/start", h.requireAuth(h.startServer))
+	mux.HandleFunc("POST /api/servers/{name}/stop", h.requireAuth(h.stopServer))
+	mux.HandleFunc("POST /api/servers/{name}/exec", h.requireAuth(h.execServer))
+	mux.HandleFunc("POST /api/servers/{name}/whitelist", h.requireAuth(h.addWhitelist))
+	mux.HandleFunc("DELETE /api/servers/{name}/whitelist/{player}", h.requireAuth(h.removeWhitelist))
+	mux.HandleFunc("POST /api/servers/{name}/ops", h.requireAuth(h.addOp))
+	mux.HandleFunc("DELETE /api/servers/{name}/ops/{player}", h.requireAuth(h.removeOp))
+	mux.HandleFunc("POST /api/servers/{name}/mods", h.requireAuth(h.addMod))
+	mux.HandleFunc("POST /api/servers/{name}/modpack", h.requireAuth(h.installModpack))
+	mux.HandleFunc("POST /api/servers/{name}/backup", h.requireAuth(h.createBackup))
+	mux.HandleFunc("POST /api/servers/{name}/restore", h.requireAuth(h.restoreBackup))
+
 	return mux
+}
+
+// requireAuth wraps a write handler so it 401s without a bearer token
+// matching h.token. Constant-time compare so response timing doesn't
+// leak how much of a guessed token was correct.
+func (h *Handler) requireAuth(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		got := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
+		if got == "" || subtle.ConstantTimeCompare([]byte(got), []byte(h.token)) != 1 {
+			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "missing or invalid token"})
+			return
+		}
+		next(w, r)
+	}
 }
 
 // listServers mirrors `mcm list`.
