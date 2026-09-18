@@ -1,3 +1,5 @@
 /mcm
 /bin/
 *.test
+/tmp/
+/.claude/settings.local.json

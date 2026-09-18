@@ -11,6 +11,15 @@ import (
 
 const defaultServersRoot = "mc-servers"
 
+// Environment variable overrides, applied on top of config.toml — the
+// simplest way to configure mcm when it's running containerized
+// (docker run -e ...) without baking a config file into an image or
+// mounting one in.
+const (
+	envServersRoot = "MCM_SERVERS_ROOT"
+	envCFAPIKey    = "MCM_CF_API_KEY"
+)
+
 type Config struct {
 	ServersRoot string `toml:"servers_root"`
 	CFAPIKey    string `toml:"cf_api_key"`
@@ -42,6 +51,13 @@ func Load() (*Config, error) {
 		}
 	} else if !os.IsNotExist(err) {
 		return nil, err
+	}
+
+	if v := os.Getenv(envServersRoot); v != "" {
+		cfg.ServersRoot = v
+	}
+	if v := os.Getenv(envCFAPIKey); v != "" {
+		cfg.CFAPIKey = v
 	}
 
 	if cfg.ServersRoot == "" {

@@ -1,0 +1,26 @@
+# Runs mcm's web dashboard in a container, driving the HOST's Docker
+# daemon to create/manage sibling Minecraft server containers
+# ("Docker-outside-of-Docker" — see README.md for why the same path is
+# mounted on both sides).
+#
+# Usage:
+#   MCM_SERVERS_ROOT=/absolute/path/on/this/host docker compose up -d
+#
+# MCM_SERVERS_ROOT must be an absolute path that already means the same
+# thing to the Docker daemon as it does here — i.e. a real path on the
+# host (or, if the daemon itself is remote/inside another layer, a path
+# valid from wherever DOCKER_HOST points).
+
+services:
+  mcm-web:
+    build: .
+    image: mcm:latest
+    ports:
+      - "127.0.0.1:8080:8080"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ${MCM_SERVERS_ROOT:?set MCM_SERVERS_ROOT to an absolute host path}:${MCM_SERVERS_ROOT:?}
+    environment:
+      MCM_SERVERS_ROOT: ${MCM_SERVERS_ROOT:?}
+      # MCM_CF_API_KEY: your-curseforge-key
+    restart: unless-stopped

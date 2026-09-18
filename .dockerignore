@@ -1,0 +1,10 @@
+.git
+/bin
+/mcm
+*.test
+
+# The Go build only needs internal/webui/dist (committed to the repo);
+# the SvelteKit source and its toolchain aren't needed to build mcm.
+web/node_modules
+web/.svelte-kit
+web/build
