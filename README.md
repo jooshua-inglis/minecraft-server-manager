@@ -7,7 +7,7 @@ Design notes are in [RESEARCH.md](RESEARCH.md); the build plan is in
 [plan/](plan/README.md).
 
 ```sh
-./install.sh        # builds and installs to ~/.local/bin/mcm (./uninstall.sh removes it)
+curl -fsSL https://raw.githubusercontent.com/jooshua-inglis/minecraft-server-manager/main/install.sh | bash
 mcm create myworld --accept-eula
 mcm start myworld
 mcm attach myworld      # live logs + stats + console in one screen
@@ -29,9 +29,9 @@ and `docker-compose.yml`, so nothing needs building or pulling from a registry.
 base=https://github.com/jooshua-inglis/minecraft-server-manager/releases/download/latest  # or .../download/v0.1.0
 arch=$(uname -m); case $arch in x86_64) arch=amd64;; aarch64) arch=arm64;; esac
 
-# Binary only:
-mkdir -p ~/.local/bin
-curl -fL "$base/mcm-linux-$arch" -o ~/.local/bin/mcm && chmod +x ~/.local/bin/mcm
+# Binary only (verifies SHA256SUMS, installs to ~/.local/bin/mcm; re-run to update):
+curl -fsSL https://raw.githubusercontent.com/jooshua-inglis/minecraft-server-manager/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/jooshua-inglis/minecraft-server-manager/main/install.sh | MCM_VERSION=v0.1.0 bash   # pin a version
 
 # Or as a Docker image, built locally from the same download:
 mkdir mcm && cd mcm
@@ -39,7 +39,8 @@ curl -fLO "$base/mcm-linux-$arch" -O "$base/Dockerfile" -O "$base/docker-compose
 docker build -t mcm .            # see "Running mcm in Docker" below for run/compose
 ```
 
-`SHA256SUMS` is attached to each release.
+`./uninstall.sh` (also standalone) stops a backgrounded `mcm web` and removes the
+binary, leaving servers and config alone.
 
 ## Configuration
 
