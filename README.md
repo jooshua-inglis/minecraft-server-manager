@@ -4,7 +4,8 @@ Manage a fleet of Minecraft servers running in Docker (via
 [itzg/minecraft-server](https://github.com/itzg/docker-minecraft-server)) from
 a CLI, a terminal dashboard, or a web UI — all three drive the same core.
 Design notes are in [RESEARCH.md](RESEARCH.md); the build plan is in
-[plan/](plan/README.md).
+[plan/](plan/README.md). Contributors and coding agents: start with
+[docs/](docs/README.md) (architecture, dev/test workflow, gotchas, CI).
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/jooshua-inglis/minecraft-server-manager/main/install.sh | bash

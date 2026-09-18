@@ -1,6 +1,6 @@
 # Implementation Plan
 
-Status: draft
+Status: all milestones (M0–M17) implemented — see [../docs/README.md](../docs/README.md) for current state, deviations, and known gaps
 Last updated: 2026-09-16
 
 Companion to `../RESEARCH.md` (background, survey of existing tools, and
