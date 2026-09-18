@@ -9,7 +9,7 @@ import (
 	"github.com/BurntSushi/toml"
 )
 
-const defaultServersRoot = "mc-servers"
+const legacyServersRoot = "mc-servers"
 
 // Environment variable overrides, applied on top of config.toml — the
 // simplest way to configure mcm when it's running containerized
@@ -61,14 +61,43 @@ func Load() (*Config, error) {
 	}
 
 	if cfg.ServersRoot == "" {
-		home, err := os.UserHomeDir()
+		root, err := defaultServersRootPath()
 		if err != nil {
 			return nil, err
 		}
-		cfg.ServersRoot = filepath.Join(home, defaultServersRoot)
+		cfg.ServersRoot = root
 	}
 
 	return cfg, nil
+}
+
+// defaultServersRootPath is where servers live when neither config.toml
+// nor MCM_SERVERS_ROOT says otherwise: $XDG_STATE_HOME/mcm/servers
+// (~/.local/state/mcm/servers). Server data is mutable runtime state, not
+// config or cache, which is what the state dir is for.
+//
+// Before that became the default it was ~/mc-servers. So existing installs
+// don't suddenly lose their servers, that old directory keeps being used
+// as long as the new one doesn't exist yet.
+func defaultServersRootPath() (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", err
+	}
+
+	stateHome := os.Getenv("XDG_STATE_HOME")
+	if stateHome == "" {
+		stateHome = filepath.Join(home, ".local", "state")
+	}
+	root := filepath.Join(stateHome, "mcm", "servers")
+
+	if _, err := os.Stat(root); os.IsNotExist(err) {
+		legacy := filepath.Join(home, legacyServersRoot)
+		if info, lerr := os.Stat(legacy); lerr == nil && info.IsDir() {
+			return legacy, nil
+		}
+	}
+	return root, nil
 }
 
 // Save persists cfg to disk, creating its parent directory if needed.

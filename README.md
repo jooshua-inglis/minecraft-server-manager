@@ -24,7 +24,7 @@ Environment variables override it:
 
 | Variable | Meaning | Default |
 |---|---|---|
-| `MCM_SERVERS_ROOT` | Directory holding every server's `manager.json` + `data/` | `~/mc-servers` |
+| `MCM_SERVERS_ROOT` | Directory holding every server's `manager.json` + `data/` | `$XDG_STATE_HOME/mcm/servers` (`~/.local/state/mcm/servers`); an existing `~/mc-servers` is still used until the new dir exists |
 | `MCM_CF_API_KEY` | CurseForge API key (modpack/mod installs) | unset |
 
 ## Web dashboard
