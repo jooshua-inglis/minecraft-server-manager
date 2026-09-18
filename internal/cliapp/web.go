@@ -13,6 +13,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/jooshua-inglis/minecraft-server-manager/internal/webapi"
+	"github.com/jooshua-inglis/minecraft-server-manager/internal/webui"
 )
 
 const webShutdownTimeout = 5 * time.Second
@@ -22,11 +23,12 @@ func newWebCmd() *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "web",
-		Short: "Start the read-only web API (and, once built, the web UI)",
-		Long: "Starts mcm's embedded HTTP server: JSON endpoints mirroring `mcm\n" +
-			"list`/`status`/`logs`, plus SSE streams for live logs and stats.\n" +
-			"Binds to localhost only by default — there's no write access or\n" +
-			"authentication yet, so treat anything else as unsafe to expose.",
+		Short: "Start the web dashboard and its read-only API",
+		Long: "Starts mcm's embedded HTTP server: the SvelteKit dashboard, and\n" +
+			"under /api/ the JSON endpoints mirroring `mcm list`/`status`/`logs`\n" +
+			"plus SSE streams for live logs and stats. Binds to localhost only\n" +
+			"by default — there's no write access or authentication yet, so\n" +
+			"treat anything else as unsafe to expose.",
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			f, err := newFleet()
@@ -42,7 +44,16 @@ func newWebCmd() *cobra.Command {
 			ctx, stop := signal.NotifyContext(cmd.Context(), syscall.SIGINT, syscall.SIGTERM)
 			defer stop()
 
-			srv := &http.Server{Addr: addr, Handler: webapi.NewHandler(f)}
+			ui, err := webui.Handler()
+			if err != nil {
+				return fmt.Errorf("loading embedded web UI: %w", err)
+			}
+
+			mux := http.NewServeMux()
+			mux.Handle("/api/", webapi.NewHandler(f))
+			mux.Handle("/", ui)
+
+			srv := &http.Server{Addr: addr, Handler: mux}
 
 			serveErr := make(chan error, 1)
 			go func() { serveErr <- srv.ListenAndServe() }()
