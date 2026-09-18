@@ -76,6 +76,11 @@ type CreateParams struct {
 	Labels        map[string]string
 	Ports         []PortMapping
 	DataDir       string
+	// MaxRestartRetries caps how many times Docker will restart the
+	// container after it exits non-zero (with its own built-in
+	// exponential backoff between attempts) before giving up and
+	// leaving it exited, rather than crash-looping forever.
+	MaxRestartRetries int
 }
 
 // Create creates (but does not start) a container.
@@ -99,9 +104,16 @@ func (c *Client) Create(ctx context.Context, p CreateParams) (string, error) {
 	}
 
 	hostCfg := &container.HostConfig{
-		Binds:         []string{p.DataDir + ":/data"},
-		PortBindings:  bindings,
-		RestartPolicy: container.RestartPolicy{Name: container.RestartPolicyUnlessStopped},
+		Binds:        []string{p.DataDir + ":/data"},
+		PortBindings: bindings,
+		// on-failure (rather than unless-stopped) restarts on a crash
+		// but not on a clean exit, and Docker gives up after
+		// MaxRestartRetries rather than restarting forever — the
+		// crash-loop backoff RESEARCH.md §3.4 calls for.
+		RestartPolicy: container.RestartPolicy{
+			Name:              container.RestartPolicyOnFailure,
+			MaximumRetryCount: p.MaxRestartRetries,
+		},
 	}
 
 	resp, err := c.cli.ContainerCreate(ctx, cfg, hostCfg, nil, nil, p.ContainerName)

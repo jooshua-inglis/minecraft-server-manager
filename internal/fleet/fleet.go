@@ -30,6 +30,13 @@ const (
 	defaultRCONStartPort = 25575
 	defaultStopTimeout   = 60 * time.Second
 	eulaURL              = "https://www.minecraft.net/en-us/eula"
+	// maxRestartRetries caps how many times Docker will restart a
+	// crashed server before giving up, so a bad config/mod can't hide
+	// behind an infinite restart loop (RESEARCH.md §3.4).
+	maxRestartRetries = 6
+	// crashLogLines is how many trailing log lines to surface as
+	// context for a crash in Status.
+	crashLogLines = 20
 )
 
 type Fleet struct {
@@ -153,7 +160,8 @@ func (f *Fleet) createContainer(ctx context.Context, meta *serverstore.Metadata)
 			// Loopback-only: RCON is an admin channel, not for public exposure.
 			{ContainerPort: containerRCONPort, HostPort: meta.RCONPort, HostIP: "127.0.0.1"},
 		},
-		DataDir: serverstore.DataDir(f.Root, meta.Name),
+		DataDir:           serverstore.DataDir(f.Root, meta.Name),
+		MaxRestartRetries: maxRestartRetries,
 	})
 	return err
 }
@@ -283,6 +291,20 @@ type Status struct {
 	Metadata *serverstore.Metadata
 	Info     *container.InspectResponse
 	DataDir  string
+	Crash    *CrashInfo
+}
+
+// CrashInfo is populated on Status when a server's container is either
+// mid-backoff after a crash or has exhausted its restart retries and
+// stopped for good, so the operator sees why instead of an opaque
+// "exited"/"restarting" status.
+type CrashInfo struct {
+	RestartCount int
+	MaxRetries   int
+	ExitCode     int
+	OOMKilled    bool
+	GaveUp       bool // restart retries exhausted; Docker won't try again
+	LastLogLines []string
 }
 
 func (f *Fleet) Status(ctx context.Context, name string) (*Status, error) {
@@ -294,11 +316,50 @@ func (f *Fleet) Status(ctx context.Context, name string) (*Status, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Status{
+
+	st := &Status{
 		Metadata: meta,
 		Info:     info,
 		DataDir:  serverstore.DataDir(f.Root, name),
-	}, nil
+	}
+
+	if info != nil && info.State != nil && !info.State.Running && (info.State.Restarting || info.State.ExitCode != 0) {
+		lines, logErr := f.tailLogs(ctx, meta.ContainerName, crashLogLines)
+		if logErr != nil {
+			lines = []string{fmt.Sprintf("(failed to fetch logs: %v)", logErr)}
+		}
+		st.Crash = &CrashInfo{
+			RestartCount: info.RestartCount,
+			MaxRetries:   maxRestartRetries,
+			ExitCode:     info.State.ExitCode,
+			OOMKilled:    info.State.OOMKilled,
+			GaveUp:       !info.State.Restarting && info.RestartCount >= maxRestartRetries,
+			LastLogLines: lines,
+		}
+	}
+
+	return st, nil
+}
+
+// tailLogs returns the last n lines of a container's combined
+// stdout/stderr, oldest first.
+func (f *Fleet) tailLogs(ctx context.Context, containerName string, n int) ([]string, error) {
+	rc, err := f.Docker.Logs(ctx, containerName, false, fmt.Sprintf("%d", n))
+	if err != nil {
+		return nil, err
+	}
+	defer rc.Close()
+
+	var buf strings.Builder
+	if _, err := stdcopy.StdCopy(&buf, &buf, rc); err != nil {
+		return nil, err
+	}
+
+	text := strings.TrimRight(buf.String(), "\n")
+	if text == "" {
+		return nil, nil
+	}
+	return strings.Split(text, "\n"), nil
 }
 
 func (f *Fleet) Rename(ctx context.Context, oldName, newName string) error {

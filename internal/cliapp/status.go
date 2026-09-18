@@ -47,6 +47,26 @@ func newStatusCmd() *cobra.Command {
 					fmt.Fprintf(out, "last error: %s\n", st.Info.State.Error)
 				}
 			}
+
+			if st.Crash != nil {
+				reason := "OOM killed"
+				if !st.Crash.OOMKilled {
+					reason = fmt.Sprintf("exit code %d", st.Crash.ExitCode)
+				}
+				if st.Crash.GaveUp {
+					fmt.Fprintf(out, "crash:      gave up after %d/%d restarts (%s) — fix the problem below, then `mcm start %s`\n",
+						st.Crash.RestartCount, st.Crash.MaxRetries, reason, st.Metadata.Name)
+				} else {
+					fmt.Fprintf(out, "crash:      restarting (attempt %d/%d, %s)\n",
+						st.Crash.RestartCount, st.Crash.MaxRetries, reason)
+				}
+				if len(st.Crash.LastLogLines) > 0 {
+					fmt.Fprintln(out, "last log lines:")
+					for _, line := range st.Crash.LastLogLines {
+						fmt.Fprintf(out, "  %s\n", line)
+					}
+				}
+			}
 			return nil
 		},
 	}
