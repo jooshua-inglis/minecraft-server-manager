@@ -17,6 +17,23 @@ mcm web start           # dashboard in the background; `mcm web stop` to stop
 `mcm --help` lists everything (mods, modpacks, backups, world export/import,
 whitelist/ops/bans, ...).
 
+## Downloading a prebuilt binary
+
+CI publishes static Linux binaries (`amd64` and `arm64`) to
+[Releases](https://github.com/jooshua-inglis/minecraft-server-manager/releases):
+every push to `main` refreshes the rolling `latest` prerelease, and pushing a
+`v*` tag creates a versioned release. On another machine:
+
+```sh
+arch=$(uname -m); case $arch in x86_64) arch=amd64;; aarch64) arch=arm64;; esac
+mkdir -p ~/.local/bin
+curl -fL "https://github.com/jooshua-inglis/minecraft-server-manager/releases/download/latest/mcm-linux-$arch" -o ~/.local/bin/mcm
+chmod +x ~/.local/bin/mcm
+```
+
+`SHA256SUMS` is attached to each release. (Use `.../releases/download/v0.1.0/...`
+for a tagged version.)
+
 ## Configuration
 
 Config lives in `config.toml` under your OS config dir (`~/.config/mcm/`).
