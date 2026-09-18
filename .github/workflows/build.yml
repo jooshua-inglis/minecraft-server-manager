@@ -1,0 +1,53 @@
+name: build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - run: go vet ./...
+      - run: go test ./...
+
+  build:
+    needs: test
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        goarch: [amd64, arm64]
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0 # so `git describe` can find tags
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+
+      # The web dashboard is prebuilt and committed (internal/webui/dist),
+      # so no JS toolchain is needed. Pure Go, so cross-compiling to arm64
+      # from an amd64 runner needs no emulation.
+      - name: Build linux/${{ matrix.goarch }}
+        env:
+          CGO_ENABLED: "0"
+          GOOS: linux
+          GOARCH: ${{ matrix.goarch }}
+        run: |
+          version="$(git describe --tags --always --dirty)"
+          go build -trimpath \
+            -ldflags "-s -w -X github.com/jooshua-inglis/minecraft-server-manager/internal/cliapp.version=${version}" \
+            -o "dist/mcm-linux-${{ matrix.goarch }}" ./cmd/mcm
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: mcm-linux-${{ matrix.goarch }}
+          path: dist/mcm-linux-${{ matrix.goarch }}
+          if-no-files-found: error
