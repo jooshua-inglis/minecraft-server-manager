@@ -355,43 +355,76 @@ monitoring dashboards, a CLI UX).
   client, and fleet/service logic between the `mcm` CLI commands and the
   `mcm web` HTTP server (see §5's "CLI/web sharing one core").
 - **Web UI**: the frontend is **SvelteKit**, talking to the Go backend's API
-  (REST/JSON, plus websockets/SSE for log/console streaming and live
-  resource graphs — see open question below). Built and either embedded
-  into the Go binary (via `embed.FS`) for single-binary distribution, or
-  served separately in dev — final packaging approach still open.
+  (REST/JSON, plus SSE for log/console streaming and live resource graphs).
+  Built as a static SPA and embedded into the Go binary via `embed.FS` for
+  single-binary distribution (see §7.6).
 - **State storage**: resolved as described in §5 — Docker is the runtime
   source of truth (queried live, no mirrored running/stopped flag to go
   stale), per-server metadata lives in `manager.json` next to each server's
   `data/` directory, and global manager config lives in the OS-standard
   config dir. No SQLite/central DB for v0.
+- **Networking**: plain per-server host port mapping with automatic
+  allocation across the fleet; no `mc-router`/hostname-routing for v0 (§7.2).
 
 ## 7. Open questions / decisions still needed
 
+All resolved as of M15 (see `plan/README.md`); left in their original
+form below for context, each with how it actually shipped.
+
 1. **Multi-user/permissions** — is this strictly single-operator, or does it
    need any notion of "who can run what," even locally?
+   **Resolved (M14):** single-operator. One shared bearer token gates every
+   write action across both the CLI (implicit — shell access) and `mcm web`;
+   no per-user accounts.
 2. **Networking model** — plain per-server host port mapping vs. adopting
    `mc-router` for hostname-based routing when multiple public servers share
    a host.
+   **Resolved (M15):** plain per-server host port mapping, with automatic
+   allocation across the fleet (no manual bookkeeping, no collisions —
+   port selection consults both Docker's live state and every server's
+   `manager.json`, since Docker doesn't report a container's port binding
+   until it has actually run). `mc-router` integration was considered and
+   deliberately deferred — not needed unless/until multiple servers need to
+   share the public `25565`.
 3. **Backup strategy** — sidecar container (`itzg/mc-backup`) vs. built into
    the CLI itself.
+   **Resolved (M10):** built into the CLI directly (`mcm backup`/`restore`),
+   RCON-coordinating `save-off`/`save-all flush`/`save-on` around a tar.gz
+   snapshot of the whole `data/` directory.
 4. **CurseForge API key handling** — where/how a user-supplied `CF_API_KEY`
    is stored (plain config vs. OS keychain) given it's a personal
    credential.
+   **Resolved (M9):** plain config (`cf_api_key` in `mcm`'s `config.toml`),
+   matching the same file's other manager-wide settings.
 5. **Web UI auth** — the CLI has an implicit trust model (whoever has shell
    access on the host). `mcm web` breaks that as soon as it's reachable from
    anything but localhost — needs at least a single-operator password/token
    before it's safe to bind beyond `127.0.0.1`. Does v0 just hard-bind to
    localhost and defer real auth, or is basic auth/token required from day
    one?
+   **Resolved (M12/M14):** localhost-only by default with a warning if
+   bound elsewhere (M12); a generated bearer token (persisted in
+   `config.toml`, printed by `mcm web`) gates every write endpoint (M14).
+   Read endpoints stay open regardless of bind address — reads were judged
+   low-risk enough not to block M12 landing before auth existed.
 6. **SvelteKit packaging** — embed the built static assets into the Go
    binary (`embed.FS`, one artifact to ship) vs. deploy the SvelteKit
    frontend as its own process/container hitting the Go API separately
    (more moving parts, but a normal Node dev loop for UI work).
+   **Resolved (M13):** embedded (`internal/webui`, `go:embed`). The
+   SvelteKit app builds as a static SPA (`adapter-static`, `ssr = false`)
+   and ships inside the `mcm` binary — single artifact, no Node runtime
+   needed at runtime. `web/`'s dev toolchain runs on Deno rather than
+   Node/npm, wrapping the same npm packages via `npm:` specifiers.
 7. **Realtime updates in the web UI** — console/log tailing and live
    resource graphs imply websockets or SSE from the Go backend; worth
    deciding early since it affects the core library's API shape (needs to
    support streaming, not just request/response), and SvelteKit's data
    loading model (stores fed by a websocket vs. polling a REST endpoint).
+   **Resolved (M12/M13):** SSE, not websockets — simpler (plain HTTP,
+   works through `net/http`'s `Flusher` with no extra dependency) and
+   sufficient for one-directional server→client streams (log lines, stats
+   snapshots). The dashboard consumes both via `EventSource`.
 
 ## 8. Suggested next steps
 

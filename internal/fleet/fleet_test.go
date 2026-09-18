@@ -61,3 +61,38 @@ func TestTypeOrVersionChanging(t *testing.T) {
 		t.Errorf("different version not reported as changing")
 	}
 }
+
+// TestRecordedPortsCoversNeverStartedServers guards against the M15
+// bug where two servers created (but never started) back to back both
+// got assigned the same port: Docker doesn't report a port binding for
+// a container until it has actually run, so port selection has to
+// consult manager.json directly rather than Docker alone.
+func TestRecordedPortsCoversNeverStartedServers(t *testing.T) {
+	root := t.TempDir()
+	for i, name := range []string{"net1", "net2"} {
+		meta := &serverstore.Metadata{
+			Name:          name,
+			Port:          25567,
+			RCONPort:      25575 + i,
+			ContainerName: serverstore.ContainerName(name),
+		}
+		if err := serverstore.Save(root, meta); err != nil {
+			t.Fatalf("saving %s: %v", name, err)
+		}
+	}
+
+	got, err := recordedPorts(root)
+	if err != nil {
+		t.Fatalf("recordedPorts: %v", err)
+	}
+
+	want := map[int]bool{25567: true, 25575: true, 25576: true}
+	if len(got) != len(want) {
+		t.Fatalf("recordedPorts = %v, want %v", got, want)
+	}
+	for p := range want {
+		if !got[p] {
+			t.Errorf("recordedPorts missing port %d", p)
+		}
+	}
+}

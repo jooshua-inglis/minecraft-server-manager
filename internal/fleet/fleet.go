@@ -86,7 +86,7 @@ func (f *Fleet) Create(ctx context.Context, name string, opts CreateOptions) (*s
 		opts.Memory = "2G"
 	}
 
-	used, err := f.Docker.UsedHostPorts(ctx)
+	used, err := f.usedPorts(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -519,6 +519,53 @@ func (f *Fleet) removeContainerIfExists(ctx context.Context, meta *serverstore.M
 		return false, err
 	}
 	return wasRunning, nil
+}
+
+// usedPorts collects every host port that's already spoken for across
+// the fleet: both ports Docker reports as actually bound (containers
+// that have run at least once) and ports recorded in every server's
+// manager.json (containers that were created but never started, whose
+// port binding Docker doesn't report until first run). Relying on
+// Docker alone lets two never-started servers both get assigned the
+// same port (RESEARCH.md §3.9 / plan M15).
+func (f *Fleet) usedPorts(ctx context.Context) (map[int]bool, error) {
+	used, err := f.Docker.UsedHostPorts(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	recorded, err := recordedPorts(f.Root)
+	if err != nil {
+		return nil, err
+	}
+	for p := range recorded {
+		used[p] = true
+	}
+	return used, nil
+}
+
+// recordedPorts returns every port saved in any server's manager.json
+// under root, regardless of whether its container has ever run. Split
+// out from usedPorts so it's testable without a Docker daemon.
+func recordedPorts(root string) (map[int]bool, error) {
+	names, err := serverstore.List(root)
+	if err != nil {
+		return nil, err
+	}
+	ports := map[int]bool{}
+	for _, name := range names {
+		meta, err := serverstore.Load(root, name)
+		if err != nil {
+			return nil, err
+		}
+		if meta.Port != 0 {
+			ports[meta.Port] = true
+		}
+		if meta.RCONPort != 0 {
+			ports[meta.RCONPort] = true
+		}
+	}
+	return ports, nil
 }
 
 // selectPort finds the first port in [start, start+count) that's neither
