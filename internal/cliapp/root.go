@@ -41,6 +41,7 @@ func Execute() error {
 		newModpackCmd(),
 		newBackupCmd(),
 		newRestoreCmd(),
+		newWebCmd(),
 		newWhitelistCmd(),
 		newOpCmd(),
 		newBanCmd(),

@@ -249,11 +249,11 @@ func (f *Fleet) Destroy(ctx context.Context, name string, opts DestroyOptions) e
 }
 
 type ServerView struct {
-	Name    string
-	Type    string
-	Version string
-	Port    int
-	Status  string
+	Name    string `json:"name"`
+	Type    string `json:"type"`
+	Version string `json:"version"`
+	Port    int    `json:"port"`
+	Status  string `json:"status"`
 }
 
 func (f *Fleet) List(ctx context.Context) ([]ServerView, error) {
@@ -299,12 +299,12 @@ type Status struct {
 // stopped for good, so the operator sees why instead of an opaque
 // "exited"/"restarting" status.
 type CrashInfo struct {
-	RestartCount int
-	MaxRetries   int
-	ExitCode     int
-	OOMKilled    bool
-	GaveUp       bool // restart retries exhausted; Docker won't try again
-	LastLogLines []string
+	RestartCount int      `json:"restart_count"`
+	MaxRetries   int      `json:"max_retries"`
+	ExitCode     int      `json:"exit_code"`
+	OOMKilled    bool     `json:"oom_killed"`
+	GaveUp       bool     `json:"gave_up"` // restart retries exhausted; Docker won't try again
+	LastLogLines []string `json:"last_log_lines,omitempty"`
 }
 
 func (f *Fleet) Status(ctx context.Context, name string) (*Status, error) {
